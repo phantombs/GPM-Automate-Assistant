@@ -1,0 +1,5 @@
+{
+  "name": "GPM Automate Assistant",
+  "description": "Một trợ lý chatbot thông minh cho GPM Automate, giúp người dùng thiết kế kịch bản tự động hóa và khắc phục sự cố bằng cách sử dụng Gemini API.",
+  "requestFramePermissions": []
+}
