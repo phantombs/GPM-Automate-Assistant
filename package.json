@@ -11,7 +11,10 @@
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@google/genai": "^1.30.0"
+    "@google/genai": "^1.30.0",
+    "mermaid": "11.0.2",
+    "@faker-js/faker": "8.4.1",
+    "jspdf": "2.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

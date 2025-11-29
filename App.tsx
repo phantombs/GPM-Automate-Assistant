@@ -8,6 +8,7 @@ import { MarkdownRenderer } from './components/MarkdownRenderer';
 import { ChatHistorySidebar } from './components/ChatHistorySidebar';
 import { HtmlAnalysisModal } from './components/HtmlAnalysisModal';
 import { PromptLibraryModal } from './components/PromptLibraryModal';
+import { FakerGeneratorModal } from './components/FakerGeneratorModal';
 
 // Icons
 const SendIcon = () => (
@@ -84,6 +85,12 @@ const CommandIcon = () => (
   </svg>
 );
 
+const DiceIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-purple-400">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+  </svg>
+);
+
 // GPM Node Commands for Auto-complete
 const NODE_COMMANDS = [
   { label: '/click', desc: 'Click vào phần tử', value: 'Hướng dẫn sử dụng Node Click trong GPM' },
@@ -99,7 +106,8 @@ const NODE_COMMANDS = [
   { label: '/scroll', desc: 'Cuộn trang', value: 'Cách dùng Node Scroll' },
   { label: '/gettext', desc: 'Lấy nội dung (Get Text)', value: 'Hướng dẫn Node Get Text' },
   { label: '/split', desc: 'Tách chuỗi (Split Text)', value: 'Cách dùng Split Text' },
-  { label: '/count', desc: 'Đếm phần tử (Count)', value: 'Hướng dẫn Node Count' }
+  { label: '/count', desc: 'Đếm phần tử (Count)', value: 'Hướng dẫn Node Count' },
+  { label: '/faker', desc: 'Tạo dữ liệu giả (Random)', value: '/faker' },
 ];
 
 // Helper to sort sessions
@@ -119,8 +127,12 @@ export default function App() {
   const [attachedFile, setAttachedFile] = useState<{name: string, content: string} | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Modals
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
   const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
+  const [isFakerModalOpen, setIsFakerModalOpen] = useState(false);
+  
   const [isListening, setIsListening] = useState(false);
   
   // Editing Message State
@@ -533,6 +545,15 @@ export default function App() {
   };
 
   const handleSelectSlashCommand = (cmd: { value: string }) => {
+    if (cmd.value === '/faker') {
+        setIsFakerModalOpen(true);
+        setShowSlashMenu(false);
+        // Clear the slash command text from input
+        const newVal = inputValue.replace(/(?:^|\s)\/faker$/, '');
+        setInputValue(newVal.trim());
+        return;
+    }
+
     // Replace the slash command with the value
     const newVal = inputValue.replace(/(?:^|\s)\/([a-zA-Z0-9]*)$/, (match) => {
         // preserve the leading space if any
@@ -543,13 +564,14 @@ export default function App() {
     // Focus back on textarea if needed, though react state update handles re-render
   };
 
+  const handleFakerInsert = (text: string) => {
+    setInputValue(prev => prev + (prev ? '\n' : '') + text);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (showSlashMenu) {
-        // If menu is open, select first item? Or just close?
-        // Simple implementation: close menu if enter is pressed without selection logic implemented
-        // Better: user clicks to select. Enter sends message.
         if (filteredCommands.length > 0) {
             handleSelectSlashCommand(filteredCommands[0]);
             return;
@@ -581,6 +603,11 @@ export default function App() {
         onClose={() => setIsPromptLibraryOpen(false)}
         onSelectPrompt={handlePromptSelect}
         messages={messages}
+      />
+      <FakerGeneratorModal
+        isOpen={isFakerModalOpen}
+        onClose={() => setIsFakerModalOpen(false)}
+        onInsert={handleFakerInsert}
       />
 
       {/* Sidebar */}
@@ -778,6 +805,12 @@ export default function App() {
                 <button onClick={() => setIsHtmlModalOpen(true)} className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Phân tích HTML">
                   <CodeBracketIcon />
                 </button>
+                <button onClick={() => setIsFakerModalOpen(true)} className="p-2.5 text-slate-400 hover:text-purple-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Tạo dữ liệu giả (Random)">
+                  <DiceIcon />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-1">
                  <button onClick={handleVoiceInput} className={`p-2.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0 ${isListening ? 'text-red-500 bg-slate-700' : ''}`} title="Nhập bằng giọng nói">
                   <MicrophoneIcon isListening={isListening} />
                 </button>
