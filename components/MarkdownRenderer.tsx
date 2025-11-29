@@ -17,14 +17,27 @@ const CheckIcon = () => (
   </svg>
 );
 
+const ChevronDownIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+  </svg>
+);
+
+const ChevronRightIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+  </svg>
+);
+
 interface CodeBlockProps {
   language: string;
   code: string;
 }
 
-// Component CodeBlock riêng biệt để quản lý trạng thái Copy
+// Component CodeBlock riêng biệt để quản lý trạng thái Copy và Collapse
 const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
   const [copied, setCopied] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const handleCopy = async () => {
     try {
@@ -37,14 +50,31 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
   };
 
   return (
-    <div className="my-3 rounded-md overflow-hidden bg-slate-950 border border-slate-700 shadow-sm relative group">
-      <div className="flex items-center justify-between bg-slate-800 px-4 py-1.5 border-b border-slate-700">
-        <span className="text-xs text-slate-400 font-mono uppercase">
-          {language || 'code'}
-        </span>
+    <div className="my-3 rounded-md overflow-hidden bg-slate-950 border border-slate-700 shadow-sm relative group transition-all duration-200">
+      <div 
+        className="flex items-center justify-between bg-slate-800 px-4 py-1.5 border-b border-slate-700 cursor-pointer select-none hover:bg-slate-700/80 transition-colors"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        title={isCollapsed ? "Mở rộng mã nguồn" : "Thu gọn mã nguồn"}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 transition-transform duration-200">
+             {isCollapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
+          </span>
+          <span className="text-xs text-slate-400 font-mono uppercase">
+            {language || 'code'}
+          </span>
+          {isCollapsed && (
+             <span className="text-xs text-slate-500 italic ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+               (Đã thu gọn)
+             </span>
+          )}
+        </div>
         <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+          onClick={(e) => {
+            e.stopPropagation(); // Ngăn chặn việc toggle collapse khi bấm copy
+            handleCopy();
+          }}
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors bg-slate-800/50 hover:bg-slate-700 p-1 rounded"
           title="Sao chép mã"
         >
           {copied ? (
@@ -60,9 +90,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
           )}
         </button>
       </div>
-      <pre className="p-4 overflow-x-auto text-slate-300 font-mono text-xs md:text-sm custom-scrollbar">
-        <code>{code}</code>
-      </pre>
+      
+      {!isCollapsed && (
+        <pre className="p-4 overflow-x-auto text-slate-300 font-mono text-xs md:text-sm custom-scrollbar animate-in fade-in slide-in-from-top-1 duration-200">
+          <code>{code}</code>
+        </pre>
+      )}
     </div>
   );
 };

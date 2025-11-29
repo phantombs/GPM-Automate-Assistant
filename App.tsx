@@ -58,6 +58,24 @@ const MenuIcon = () => (
   </svg>
 );
 
+const PencilSquareIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+  </svg>
+);
+
+const XMarkIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+);
+
+const CheckIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+);
+
 // Helper to sort sessions
 const sortSessions = (sessions: ChatSession[]) => {
   return [...sessions].sort((a, b) => {
@@ -78,6 +96,10 @@ export default function App() {
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
   const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  
+  // Editing Message State
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editedMessageContent, setEditedMessageContent] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,6 +177,7 @@ export default function App() {
   }, []);
 
   const scrollToBottom = () => {
+    if (editingMessageId) return; // Don't scroll when editing
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -340,6 +363,96 @@ export default function App() {
     setAttachedFile(null);
   };
 
+  // Edit Message Handlers
+  const startEditingMessage = (msg: Message) => {
+    setEditingMessageId(msg.id);
+    setEditedMessageContent(msg.text);
+  };
+
+  const cancelEditingMessage = () => {
+    setEditingMessageId(null);
+    setEditedMessageContent('');
+  };
+
+  const handleSaveEdit = async (messageId: string) => {
+    if (!currentSessionId || !editedMessageContent.trim()) return;
+
+    // 1. Get session and find index of message
+    const session = sessions.find(s => s.id === currentSessionId);
+    if (!session) return;
+    const msgIndex = session.messages.findIndex(m => m.id === messageId);
+    if (msgIndex === -1) return;
+
+    // 2. Create new history: Truncate everything AFTER the edited message
+    // The edited message text is updated
+    const updatedUserMsg: Message = {
+        ...session.messages[msgIndex],
+        text: editedMessageContent,
+        timestamp: new Date()
+    };
+    
+    // Keep messages before the edited one + the edited one
+    const newHistory = [
+        ...session.messages.slice(0, msgIndex),
+        updatedUserMsg
+    ];
+
+    // 3. Update state immediately
+    updateCurrentSessionMessages(newHistory);
+    setEditingMessageId(null);
+    setEditedMessageContent('');
+    setIsThinking(true);
+
+    // 4. Trigger AI Response (Regenerate)
+    try {
+        const botMsgId = (Date.now() + 1).toString();
+        const messagesWithBotPlaceholder = [
+            ...newHistory,
+            { id: botMsgId, role: Role.MODEL, text: '', timestamp: new Date() }
+        ];
+        updateCurrentSessionMessages(messagesWithBotPlaceholder);
+
+        // Prepare context for API: Exclude the last message from history prop because we pass it as "newMessage" or just pass truncated history
+        // Actually streamChatResponse expects (history, newMessage). 
+        // We can pass `newHistory.slice(0, -1)` as history and `updatedUserMsg.text` as message.
+        const contextForStream = newHistory.slice(0, -1).slice(-10); 
+        
+        const stream = await streamChatResponse(contextForStream, updatedUserMsg.text, null);
+
+        let fullResponse = '';
+        for await (const chunk of stream) {
+            fullResponse += chunk;
+            setSessions(prev => prev.map(s => {
+                if (s.id === currentSessionId) {
+                    const newMsgs = s.messages.map(msg => 
+                        msg.id === botMsgId ? { ...msg, text: fullResponse } : msg
+                    );
+                    return { ...s, messages: newMsgs };
+                }
+                return s;
+            }));
+        }
+
+    } catch (error) {
+        setSessions(prev => prev.map(s => {
+            if (s.id === currentSessionId) {
+                const newMsgs = [...s.messages, { 
+                    id: Date.now().toString(), 
+                    role: Role.MODEL, 
+                    text: "Lỗi khi tạo lại câu trả lời.", 
+                    timestamp: new Date(),
+                    isError: true
+                }];
+                return { ...s, messages: newMsgs };
+            }
+            return s;
+        }));
+    } finally {
+        setIsThinking(false);
+    }
+  };
+
+
   const handleHtmlSubmit = (html: string) => {
     const analysisPrompt = `Hãy phân tích đoạn mã HTML sau và tạo bảng XPath chuẩn cho các phần tử quan trọng:\n\n\`\`\`html\n${html}\n\`\`\``;
     sendChatMessage(analysisPrompt, null);
@@ -397,6 +510,7 @@ export default function App() {
         isOpen={isPromptLibraryOpen}
         onClose={() => setIsPromptLibraryOpen(false)}
         onSelectPrompt={handlePromptSelect}
+        messages={messages}
       />
 
       {/* Sidebar */}
@@ -451,20 +565,68 @@ export default function App() {
             {messages.map((msg) => (
               <div key={msg.id} className={`flex w-full ${msg.role === Role.USER ? 'justify-end' : 'justify-start'}`}>
                 <div className={`flex gap-3 max-w-[90%] md:max-w-[80%] ${msg.role === Role.USER ? 'flex-row-reverse' : 'flex-row'}`}>
+                  
+                  {/* Avatar */}
                   <div className="flex-shrink-0 mt-1 hidden md:block">
                     {msg.role === Role.USER ? (
-                      <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center group relative cursor-pointer">
                           <span className="text-xs font-bold text-slate-300">BẠN</span>
                       </div>
                     ) : <RobotIcon />}
                   </div>
-                  <div className={`relative p-3 md:p-4 rounded-2xl shadow-sm overflow-hidden ${
-                      msg.role === Role.USER ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
-                    } ${msg.isError ? 'border-red-500 bg-red-900/20 text-red-200' : ''}`}>
-                    <MarkdownRenderer content={msg.text} />
-                    <div className={`text-[10px] mt-2 opacity-60 ${msg.role === Role.USER ? 'text-blue-200' : 'text-slate-400'}`}>
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
+
+                  {/* Message Content Bubble */}
+                  <div className={`relative p-3 md:p-4 rounded-2xl shadow-sm overflow-hidden group/msg transition-all w-full
+                    ${msg.role === Role.USER ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'} 
+                    ${msg.isError ? 'border-red-500 bg-red-900/20 text-red-200' : ''}
+                  `}>
+                    
+                    {/* Editing Mode */}
+                    {editingMessageId === msg.id ? (
+                      <div className="flex flex-col gap-2 w-full min-w-[250px]">
+                        <textarea
+                          value={editedMessageContent}
+                          onChange={(e) => setEditedMessageContent(e.target.value)}
+                          className="w-full bg-slate-900/50 text-white p-2 rounded border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 text-sm resize-y min-h-[80px]"
+                          autoFocus
+                        />
+                        <div className="flex justify-end gap-2">
+                           <button 
+                              onClick={cancelEditingMessage}
+                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-medium transition-colors flex items-center gap-1"
+                            >
+                              <XMarkIcon /> Hủy
+                            </button>
+                            <button 
+                              onClick={() => handleSaveEdit(msg.id)}
+                              className="px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-xs font-medium transition-colors flex items-center gap-1"
+                            >
+                              <CheckIcon /> Lưu & Hỏi lại
+                            </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <MarkdownRenderer content={msg.text} />
+                        
+                        <div className="flex items-center justify-between mt-2">
+                            <div className={`text-[10px] opacity-60 ${msg.role === Role.USER ? 'text-blue-200' : 'text-slate-400'}`}>
+                              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+
+                            {/* Edit Button (Only for User) */}
+                            {msg.role === Role.USER && !isThinking && (
+                              <button 
+                                onClick={() => startEditingMessage(msg)}
+                                className="opacity-0 group-hover/msg:opacity-100 p-1 text-blue-200 hover:text-white hover:bg-blue-500 rounded transition-all"
+                                title="Sửa tin nhắn"
+                              >
+                                <PencilSquareIcon />
+                              </button>
+                            )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

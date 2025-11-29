@@ -1,12 +1,25 @@
-import React from 'react';
+
+import React, { useMemo } from 'react';
+import { Message, Role } from '../types';
 
 interface PromptLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectPrompt: (prompt: string) => void;
+  messages: Message[];
 }
 
-const CATEGORIES = [
+const STATIC_CATEGORIES = [
+  {
+    title: "Tra cứu Node & Lệnh",
+    prompts: [
+      "Chi tiết thông tin Node Click",
+      "Hướng dẫn sử dụng Node Type Text",
+      "Tham số của Node HTTP Request",
+      "Lưu ý khi dùng Node Read Excel File",
+      "Cấu hình Node For Loop như thế nào?"
+    ]
+  },
   {
     title: "Cơ bản & XPath",
     prompts: [
@@ -36,8 +49,92 @@ const CATEGORIES = [
   }
 ];
 
-export const PromptLibraryModal: React.FC<PromptLibraryModalProps> = ({ isOpen, onClose, onSelectPrompt }) => {
+const CONTEXT_RULES = [
+    {
+        keywords: ['excel', 'sheet', 'csv', 'file', 'dữ liệu', 'đọc', 'ghi'],
+        prompts: [
+            "Làm sao để đọc file Excel mà không bị lỗi font?",
+            "Cách append dữ liệu vào file Excel có sẵn",
+            "Kiểm tra file có tồn tại trong thư mục hay không?",
+            "Cách lấy số dòng của file Excel"
+        ]
+    },
+    {
+        keywords: ['xpath', 'html', 'dom', 'element', 'phần tử', 'tìm', 'click', 'gõ', 'nhập'],
+        prompts: [
+            "Cách tạo XPath chứa text() tương đối",
+            "Xử lý phần tử nằm trong iframe",
+            "Tìm phần tử cha của một nút (parent node)",
+            "Cách click vào phần tử bị che khuất"
+        ]
+    },
+    {
+        keywords: ['lỗi', 'error', 'bug', 'fail', 'không chạy', 'dừng'],
+        prompts: [
+            "Tại sao tool báo thành công nhưng không thấy click?",
+            "Cách debug từng bước để tìm lỗi",
+            "Xử lý lỗi timeout khi mạng chậm",
+            "Làm sao để bỏ qua lỗi và chạy tiếp (Try-Catch)?"
+        ]
+    },
+    {
+        keywords: ['proxy', 'ip', 'mạng', 'http', 'request', 'api'],
+        prompts: [
+            "Cách sử dụng HTTP Request để gọi API",
+            "Kiểm tra IP hiện tại bằng script",
+            "Cấu hình xoay Proxy sau mỗi lần chạy",
+            "Cách lấy Cookie từ trình duyệt"
+        ]
+    },
+    {
+         keywords: ['captcha', 'recaptcha', 'giải', 'mã'],
+         prompts: [
+             "Cách lấy SiteKey để giải ReCaptcha",
+             "Hướng dẫn dùng extension giải Captcha",
+             "Code mẫu giải Captcha ảnh số"
+         ]
+    }
+];
+
+export const PromptLibraryModal: React.FC<PromptLibraryModalProps> = ({ isOpen, onClose, onSelectPrompt, messages }) => {
   if (!isOpen) return null;
+
+  const displayCategories = useMemo(() => {
+    // 1. Analyze context
+    const suggestions = new Set<string>();
+    
+    // Get last 5 user messages
+    const recentContent = messages
+        .filter(m => m.role === Role.USER)
+        .slice(-5)
+        .map(m => m.text.toLowerCase())
+        .join(' ');
+
+    if (recentContent) {
+        CONTEXT_RULES.forEach(rule => {
+            if (rule.keywords.some(k => recentContent.includes(k))) {
+                rule.prompts.forEach(p => suggestions.add(p));
+            }
+        });
+    }
+
+    const contextualPrompts = Array.from(suggestions).slice(0, 4);
+    
+    const categories = [];
+
+    // Add contextual category if exists
+    if (contextualPrompts.length > 0) {
+        categories.push({
+            title: "✨ Gợi ý theo ngữ cảnh",
+            prompts: contextualPrompts
+        });
+    }
+
+    // Add static categories
+    categories.push(...STATIC_CATEGORIES);
+
+    return categories;
+  }, [messages]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -55,9 +152,9 @@ export const PromptLibraryModal: React.FC<PromptLibraryModalProps> = ({ isOpen, 
         
         <div className="p-6 overflow-y-auto custom-scrollbar">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {CATEGORIES.map((cat, idx) => (
+            {displayCategories.map((cat, idx) => (
               <div key={idx} className="space-y-3">
-                <h4 className="text-sm font-bold text-blue-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                <h4 className={`text-sm font-bold uppercase tracking-wider border-b pb-2 ${idx === 0 && cat.title.startsWith("✨") ? "text-yellow-400 border-yellow-500/30" : "text-blue-400 border-slate-800"}`}>
                   {cat.title}
                 </h4>
                 <div className="space-y-2">
