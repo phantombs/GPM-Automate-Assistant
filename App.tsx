@@ -5,6 +5,7 @@ import { INITIAL_GREETING } from './constants';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
 import { ChatHistorySidebar } from './components/ChatHistorySidebar';
 import { HtmlAnalysisModal } from './components/HtmlAnalysisModal';
+import { PromptLibraryModal } from './components/PromptLibraryModal';
 
 // Icons
 const SendIcon = () => (
@@ -25,6 +26,24 @@ const CodeBracketIcon = () => (
   </svg>
 );
 
+const LightBulbIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-yellow-500">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-1.94c.413-.002.827-.006 1.241-.012.352-.005.696-.01 1.037-.015a6.45 6.45 0 10-4.556 0c.34.005.685.01 1.037.015.414.006.828.01 1.241.012V18zm0 0a2.25 2.25 0 100 4.5 2.25 2.25 0 000-4.5zM12 9a3.75 3.75 0 00-3.75 3.75c0 .605.156 1.17.433 1.666.234.417.46.903.46 1.498v.487a.75.75 0 01-1.5 0v-.487c0-.986-.345-1.764-.704-2.404A5.25 5.25 0 1115.704 15.8c-.36.64-.704 1.418-.704 2.404v.487a.75.75 0 01-1.5 0v-.487c0-.595.226-1.08.46-1.498A3.75 3.75 0 0012 9z" />
+  </svg>
+);
+
+const MicrophoneIcon = ({ isListening }: { isListening: boolean }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill={isListening ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-5 h-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+  </svg>
+);
+
+const DownloadIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+  </svg>
+);
+
 const RobotIcon = () => (
     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -39,7 +58,7 @@ const MenuIcon = () => (
   </svg>
 );
 
-// Helper to sort sessions: Pinned first, then by date descending
+// Helper to sort sessions
 const sortSessions = (sessions: ChatSession[]) => {
   return [...sessions].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;
@@ -57,17 +76,19 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
+  const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null); // Use any for webkitSpeechRecognition
 
-  // Load sessions from local storage on mount
+  // Load sessions from local storage
   useEffect(() => {
     const savedSessions = localStorage.getItem('gpm_chat_sessions');
     if (savedSessions) {
       try {
         const parsed = JSON.parse(savedSessions);
-        // Convert timestamp strings back to Date objects and ensure isPinned exists
         const hydrated = parsed.map((s: any) => ({
           ...s,
           lastMessageAt: new Date(s.lastMessageAt),
@@ -95,17 +116,43 @@ export default function App() {
     }
   }, []);
 
-  // Save sessions to local storage whenever they change
+  // Save sessions
   useEffect(() => {
     if (sessions.length > 0) {
       localStorage.setItem('gpm_chat_sessions', JSON.stringify(sessions));
     }
   }, [sessions]);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom
   useEffect(() => {
     scrollToBottom();
   }, [sessions, currentSessionId, isThinking]);
+
+  // Init Speech Recognition
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = 'vi-VN';
+
+      recognitionRef.current.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputValue(prev => prev + (prev ? ' ' : '') + transcript);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onerror = (event: any) => {
+        console.error('Speech recognition error', event.error);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -125,18 +172,12 @@ export default function App() {
       isPinned: false
     };
     
-    setSessions(prev => {
-        // Insert new session after pinned sessions but before other unpinned sessions
-        // Or simpler: just add and resort
-        return sortSessions([newSession, ...prev]);
-    });
+    setSessions(prev => sortSessions([newSession, ...prev]));
     setCurrentSessionId(newSession.id);
   };
 
   const deleteSession = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent selecting the session when clicking delete
-    
-    // Check if we are deleting the current session
+    e.stopPropagation();
     let nextSessionId = currentSessionId;
     if (currentSessionId === id) {
        const remaining = sessions.filter(s => s.id !== id);
@@ -146,10 +187,9 @@ export default function App() {
            nextSessionId = null;
        }
     }
-
     const newSessions = sessions.filter(s => s.id !== id);
     setSessions(newSessions);
-    localStorage.setItem('gpm_chat_sessions', JSON.stringify(newSessions)); // Force update storage
+    localStorage.setItem('gpm_chat_sessions', JSON.stringify(newSessions));
     
     if (!nextSessionId && newSessions.length === 0) {
         createNewSession();
@@ -175,15 +215,10 @@ export default function App() {
 
   const updateCurrentSessionMessages = (newMessages: Message[]) => {
     if (!currentSessionId) return;
-    
     setSessions(prev => {
         const updated = prev.map(s => {
             if (s.id === currentSessionId) {
-                return {
-                ...s,
-                messages: newMessages,
-                lastMessageAt: new Date()
-                };
+                return { ...s, messages: newMessages, lastMessageAt: new Date() };
             }
             return s;
         });
@@ -193,7 +228,6 @@ export default function App() {
 
   const updateSessionTitle = (sessionId: string, firstUserMessage: string) => {
     setSessions(prev => prev.map(s => {
-      // Only auto-rename if it's the default title
       if (s.id === sessionId && s.title === 'Đoạn chat mới') {
         const title = firstUserMessage.slice(0, 30) + (firstUserMessage.length > 30 ? '...' : '');
         return { ...s, title };
@@ -202,20 +236,15 @@ export default function App() {
     }));
   };
 
-  // Logic xử lý đọc file
   const processFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
-      setAttachedFile({
-        name: file.name,
-        content: content
-      });
+      setAttachedFile({ name: file.name, content: content });
     };
     reader.readAsText(file);
   };
 
-  // Xử lý sự kiện onChange của input file
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -223,7 +252,6 @@ export default function App() {
     event.target.value = '';
   };
 
-  // Drag & Drop handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -233,7 +261,6 @@ export default function App() {
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only reset if leaving the container, not entering a child
     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
     setIsDragging(false);
   };
@@ -242,18 +269,14 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      processFile(file);
+      processFile(e.dataTransfer.files[0]);
     }
   };
 
-  // Core Send Logic
   const sendChatMessage = async (text: string, file: {name: string, content: string} | null) => {
     if (!currentSessionId) return;
 
-    // 1. Add User Message
     const userMsg: Message = {
       id: Date.now().toString(),
       role: Role.USER,
@@ -268,7 +291,6 @@ export default function App() {
     setIsThinking(true);
 
     try {
-      // 2. Prepare Model Placeholder
       const botMsgId = (Date.now() + 1).toString();
       const messagesWithBotPlaceholder = [
         ...updatedMessages,
@@ -276,12 +298,10 @@ export default function App() {
       ];
       updateCurrentSessionMessages(messagesWithBotPlaceholder);
 
-      // 3. Stream Response
       const historyContext = updatedMessages.slice(-10);
       const stream = await streamChatResponse(historyContext, text, file?.content);
 
       let fullResponse = '';
-      
       for await (const chunk of stream) {
         fullResponse += chunk;
         setSessions(prev => prev.map(s => {
@@ -325,6 +345,39 @@ export default function App() {
     sendChatMessage(analysisPrompt, null);
   };
 
+  const handlePromptSelect = (prompt: string) => {
+    setInputValue(prompt);
+  };
+
+  const handleVoiceInput = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      if (recognitionRef.current) {
+        setIsListening(true);
+        recognitionRef.current.start();
+      } else {
+        alert("Trình duyệt của bạn không hỗ trợ tính năng nhận diện giọng nói.");
+      }
+    }
+  };
+
+  const handleExportChat = () => {
+    if (!currentSession) return;
+    const content = currentSession.messages.map(m => 
+      `[${m.role === Role.USER ? 'USER' : 'BOT'} - ${new Date(m.timestamp).toLocaleString()}]\n${m.text}\n`
+    ).join('\n-------------------\n');
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `GPM_Chat_Export_${currentSession.id}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -334,11 +387,16 @@ export default function App() {
 
   return (
     <div className="flex h-full bg-slate-900 overflow-hidden">
-      {/* Html Analysis Modal */}
+      {/* Modals */}
       <HtmlAnalysisModal 
         isOpen={isHtmlModalOpen} 
         onClose={() => setIsHtmlModalOpen(false)} 
         onAnalyze={handleHtmlSubmit}
+      />
+      <PromptLibraryModal 
+        isOpen={isPromptLibraryOpen}
+        onClose={() => setIsPromptLibraryOpen(false)}
+        onSelectPrompt={handlePromptSelect}
       />
 
       {/* Sidebar */}
@@ -357,64 +415,53 @@ export default function App() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full w-full relative">
         {/* Header */}
-        <header className="flex items-center gap-3 px-4 py-3 bg-slate-800/50 backdrop-blur-md border-b border-slate-700/50 flex-shrink-0">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="md:hidden p-2 text-slate-400 hover:text-white rounded-lg"
-          >
-            <MenuIcon />
-          </button>
-          
+        <header className="flex items-center justify-between px-4 py-3 bg-slate-800/50 backdrop-blur-md border-b border-slate-700/50 flex-shrink-0">
           <div className="flex items-center gap-3">
+            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-slate-400 hover:text-white rounded-lg">
+              <MenuIcon />
+            </button>
+            <div className="flex items-center gap-3">
               <RobotIcon />
-            <div className="min-w-0">
-              <h1 className="text-base md:text-lg font-bold text-white tracking-tight truncate flex items-center gap-2">
-                {currentSession?.title || "Trợ lý GPM"}
-                {currentSession?.isPinned && (
+              <div className="min-w-0">
+                <h1 className="text-base md:text-lg font-bold text-white tracking-tight truncate flex items-center gap-2">
+                  {currentSession?.title || "Trợ lý GPM"}
+                  {currentSession?.isPinned && (
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-blue-400">
-                        <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clipRule="evenodd" />
+                      <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clipRule="evenodd" />
                     </svg>
-                )}
-              </h1>
-              <p className="text-[10px] md:text-xs text-slate-400 truncate">
-                Chuyên gia Tự động hóa & Xử lý lỗi
-              </p>
+                  )}
+                </h1>
+                <p className="text-[10px] md:text-xs text-slate-400 truncate">Chuyên gia Tự động hóa & Xử lý lỗi</p>
+              </div>
             </div>
           </div>
+          
+          <button 
+            onClick={handleExportChat}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+            title="Xuất nội dung chat"
+          >
+            <DownloadIcon />
+          </button>
         </header>
 
         {/* Messages */}
         <main className="flex-1 overflow-y-auto px-2 md:px-6 py-4 custom-scrollbar scroll-smooth">
           <div className="max-w-4xl mx-auto space-y-6">
             {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex w-full ${msg.role === Role.USER ? 'justify-end' : 'justify-start'}`}
-              >
+              <div key={msg.id} className={`flex w-full ${msg.role === Role.USER ? 'justify-end' : 'justify-start'}`}>
                 <div className={`flex gap-3 max-w-[90%] md:max-w-[80%] ${msg.role === Role.USER ? 'flex-row-reverse' : 'flex-row'}`}>
-                  
-                  {/* Avatar */}
                   <div className="flex-shrink-0 mt-1 hidden md:block">
                     {msg.role === Role.USER ? (
                       <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
                           <span className="text-xs font-bold text-slate-300">BẠN</span>
                       </div>
-                    ) : (
-                      <RobotIcon />
-                    )}
+                    ) : <RobotIcon />}
                   </div>
-
-                  {/* Message Bubble */}
-                  <div
-                    className={`relative p-3 md:p-4 rounded-2xl shadow-sm overflow-hidden ${
-                      msg.role === Role.USER
-                        ? 'bg-blue-600 text-white rounded-tr-none'
-                        : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
-                    } ${msg.isError ? 'border-red-500 bg-red-900/20 text-red-200' : ''}`}
-                  >
+                  <div className={`relative p-3 md:p-4 rounded-2xl shadow-sm overflow-hidden ${
+                      msg.role === Role.USER ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
+                    } ${msg.isError ? 'border-red-500 bg-red-900/20 text-red-200' : ''}`}>
                     <MarkdownRenderer content={msg.text} />
-                    
-                    {/* Timestamp */}
                     <div className={`text-[10px] mt-2 opacity-60 ${msg.role === Role.USER ? 'text-blue-200' : 'text-slate-400'}`}>
                       {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
@@ -422,7 +469,6 @@ export default function App() {
                 </div>
               </div>
             ))}
-
             {isThinking && (
               <div className="flex justify-start w-full">
                 <div className="flex gap-3">
@@ -435,7 +481,6 @@ export default function App() {
                 </div>
               </div>
             )}
-            
             <div ref={messagesEndRef} />
           </div>
         </main>
@@ -447,12 +492,9 @@ export default function App() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-          {/* Overlay for Drop */}
           {isDragging && (
             <div className="absolute inset-0 bg-blue-600/10 backdrop-blur-sm flex items-center justify-center z-50 border-2 border-dashed border-blue-500 rounded-t-xl">
-              <div className="text-blue-400 font-bold text-lg pointer-events-none animate-pulse">
-                Thả file vào đây để đính kèm
-              </div>
+              <div className="text-blue-400 font-bold text-lg pointer-events-none animate-pulse">Thả file vào đây để đính kèm</div>
             </div>
           )}
 
@@ -460,47 +502,36 @@ export default function App() {
             {attachedFile && (
               <div className="flex items-center gap-2 mb-2 bg-slate-800 px-3 py-1.5 rounded-lg w-fit text-sm text-blue-300 border border-blue-900/50">
                   <span className="truncate max-w-[200px]">{attachedFile.name}</span>
-                  <button 
-                      onClick={() => setAttachedFile(null)}
-                      className="hover:text-red-400 ml-1"
-                  >
-                      ✕
-                  </button>
+                  <button onClick={() => setAttachedFile(null)} className="hover:text-red-400 ml-1">✕</button>
               </div>
             )}
 
             <div className="relative flex items-end gap-2 bg-slate-800 p-2 rounded-xl border border-slate-700 focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
-              
               <div className="flex flex-col gap-1">
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0"
-                  title="Đính kèm tệp (.gscript, .txt, .html)"
-                >
+                <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Đính kèm tệp">
                   <AttachIcon />
                 </button>
-                <button 
-                  onClick={() => setIsHtmlModalOpen(true)}
-                  className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0"
-                  title="Phân tích HTML & Tạo XPath"
-                >
-                  <CodeBracketIcon />
+                <button onClick={() => setIsPromptLibraryOpen(true)} className="p-2.5 text-slate-400 hover:text-yellow-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Mẫu câu hỏi">
+                  <LightBulbIcon />
                 </button>
               </div>
 
-              <input 
-                type="file" 
-                ref={fileInputRef}
-                className="hidden"
-                onChange={handleFileUpload}
-                accept=".txt,.json,.gscript,.js,.ts,.html,.htm"
-              />
+              <div className="flex flex-col gap-1">
+                <button onClick={() => setIsHtmlModalOpen(true)} className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Phân tích HTML">
+                  <CodeBracketIcon />
+                </button>
+                 <button onClick={handleVoiceInput} className={`p-2.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0 ${isListening ? 'text-red-500 bg-slate-700' : ''}`} title="Nhập bằng giọng nói">
+                  <MicrophoneIcon isListening={isListening} />
+                </button>
+              </div>
+
+              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".txt,.json,.gscript,.js,.ts,.html,.htm" />
 
               <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Hỏi vấn đề, hoặc kéo thả file/HTML vào đây..."
+                placeholder={isListening ? "Đang lắng nghe..." : "Hỏi vấn đề, hoặc kéo thả file/HTML vào đây..."}
                 className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none py-3 max-h-32 resize-none custom-scrollbar min-h-[44px]"
                 rows={1}
               />
@@ -514,9 +545,7 @@ export default function App() {
               </button>
             </div>
              <div className="text-center mt-2">
-                <p className="text-[10px] text-slate-500">
-                    GPM Automate Assistant có thể đưa ra thông tin không chính xác.
-                </p>
+                <p className="text-[10px] text-slate-500">GPM Automate Assistant có thể đưa ra thông tin không chính xác.</p>
               </div>
           </div>
         </footer>
