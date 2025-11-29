@@ -1,3 +1,5 @@
+
+
 import React, { useState, useRef, useEffect } from 'react';
 import { streamChatResponse } from './services/geminiService';
 import { Message, Role, ChatSession } from './types';
@@ -76,6 +78,30 @@ const CheckIcon = () => (
     </svg>
 );
 
+const CommandIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-purple-400">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+  </svg>
+);
+
+// GPM Node Commands for Auto-complete
+const NODE_COMMANDS = [
+  { label: '/click', desc: 'Click vào phần tử', value: 'Hướng dẫn sử dụng Node Click trong GPM' },
+  { label: '/type', desc: 'Nhập văn bản (Type Text)', value: 'Cách dùng Node Type Text' },
+  { label: '/open', desc: 'Mở trình duyệt (Open Browser)', value: 'Cấu hình Node Open Browser' },
+  { label: '/http', desc: 'Gửi HTTP Request', value: 'Hướng dẫn Node HTTP Request' },
+  { label: '/readexcel', desc: 'Đọc file Excel', value: 'Cách đọc dữ liệu từ Excel (Read Excel File)' },
+  { label: '/writeexcel', desc: 'Ghi file Excel', value: 'Cách ghi dữ liệu vào Excel (Write Excel File)' },
+  { label: '/wait', desc: 'Chờ đợi (Wait/Delay)', value: 'Sử dụng Node Wait/Delay' },
+  { label: '/if', desc: 'Điều kiện (If Block)', value: 'Cấu hình IfBlockNode' },
+  { label: '/loop', desc: 'Vòng lặp (For Loop)', value: 'Cách dùng ForBlockNode' },
+  { label: '/script', desc: 'Chạy Javascript', value: 'Hướng dẫn Node Javascript Execute' },
+  { label: '/scroll', desc: 'Cuộn trang', value: 'Cách dùng Node Scroll' },
+  { label: '/gettext', desc: 'Lấy nội dung (Get Text)', value: 'Hướng dẫn Node Get Text' },
+  { label: '/split', desc: 'Tách chuỗi (Split Text)', value: 'Cách dùng Split Text' },
+  { label: '/count', desc: 'Đếm phần tử (Count)', value: 'Hướng dẫn Node Count' }
+];
+
 // Helper to sort sessions
 const sortSessions = (sessions: ChatSession[]) => {
   return [...sessions].sort((a, b) => {
@@ -100,6 +126,10 @@ export default function App() {
   // Editing Message State
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedMessageContent, setEditedMessageContent] = useState('');
+
+  // Slash Command State
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -412,9 +442,6 @@ export default function App() {
         ];
         updateCurrentSessionMessages(messagesWithBotPlaceholder);
 
-        // Prepare context for API: Exclude the last message from history prop because we pass it as "newMessage" or just pass truncated history
-        // Actually streamChatResponse expects (history, newMessage). 
-        // We can pass `newHistory.slice(0, -1)` as history and `updatedUserMsg.text` as message.
         const contextForStream = newHistory.slice(0, -1).slice(-10); 
         
         const stream = await streamChatResponse(contextForStream, updatedUserMsg.text, null);
@@ -491,12 +518,55 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInputValue(val);
+
+    // Regex Check for Slash Command at end of string or isolated
+    const match = val.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
+    if (match) {
+      setSlashQuery(match[1]);
+      setShowSlashMenu(true);
+    } else {
+      setShowSlashMenu(false);
+    }
+  };
+
+  const handleSelectSlashCommand = (cmd: { value: string }) => {
+    // Replace the slash command with the value
+    const newVal = inputValue.replace(/(?:^|\s)\/([a-zA-Z0-9]*)$/, (match) => {
+        // preserve the leading space if any
+        return match.startsWith(' ') ? ' ' + cmd.value : cmd.value;
+    });
+    setInputValue(newVal);
+    setShowSlashMenu(false);
+    // Focus back on textarea if needed, though react state update handles re-render
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (showSlashMenu) {
+        // If menu is open, select first item? Or just close?
+        // Simple implementation: close menu if enter is pressed without selection logic implemented
+        // Better: user clicks to select. Enter sends message.
+        if (filteredCommands.length > 0) {
+            handleSelectSlashCommand(filteredCommands[0]);
+            return;
+        }
+        setShowSlashMenu(false);
+      }
       handleSendMessage();
     }
+    if (e.key === 'Escape') {
+        setShowSlashMenu(false);
+    }
   };
+
+  const filteredCommands = NODE_COMMANDS.filter(c => 
+    c.label.toLowerCase().includes(slashQuery.toLowerCase()) || 
+    c.desc.toLowerCase().includes(slashQuery.toLowerCase())
+  );
 
   return (
     <div className="flex h-full bg-slate-900 overflow-hidden">
@@ -660,6 +730,32 @@ export default function App() {
             </div>
           )}
 
+          {/* Slash Command Menu */}
+          {showSlashMenu && filteredCommands.length > 0 && (
+             <div className="absolute bottom-full left-0 mb-2 ml-16 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
+                <div className="p-2 bg-slate-900/50 border-b border-slate-700 text-xs text-slate-400 font-medium">
+                    Gợi ý lệnh GPM (Dùng phím mũi tên hoặc click)
+                </div>
+                <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                    {filteredCommands.map((cmd, idx) => (
+                        <button
+                            key={idx}
+                            onClick={() => handleSelectSlashCommand(cmd)}
+                            className="w-full text-left px-4 py-2 hover:bg-blue-600/20 hover:text-blue-300 text-slate-300 flex items-center gap-3 transition-colors"
+                        >
+                            <div className="p-1 bg-purple-500/10 rounded">
+                                <CommandIcon />
+                            </div>
+                            <div>
+                                <div className="font-bold text-sm text-purple-400">{cmd.label}</div>
+                                <div className="text-xs opacity-70 truncate">{cmd.desc}</div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+             </div>
+          )}
+
           <div className="max-w-4xl mx-auto">
             {attachedFile && (
               <div className="flex items-center gap-2 mb-2 bg-slate-800 px-3 py-1.5 rounded-lg w-fit text-sm text-blue-300 border border-blue-900/50">
@@ -691,9 +787,9 @@ export default function App() {
 
               <textarea
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder={isListening ? "Đang lắng nghe..." : "Hỏi vấn đề, hoặc kéo thả file/HTML vào đây..."}
+                placeholder={isListening ? "Đang lắng nghe..." : "Gõ '/' để chọn lệnh, hoặc hỏi bất kỳ điều gì..."}
                 className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none py-3 max-h-32 resize-none custom-scrollbar min-h-[44px]"
                 rows={1}
               />
