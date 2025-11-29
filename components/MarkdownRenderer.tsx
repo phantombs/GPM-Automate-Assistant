@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf';
 
 interface MarkdownRendererProps {
   content: string;
+  onRegenerateMermaid?: (code: string) => void;
 }
 
 // Initialize mermaid
@@ -61,6 +62,12 @@ const DownloadIcon = () => (
   </svg>
 );
 
+const ArrowPathIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-3.5 h-3.5 ${className || ''}`}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+  </svg>
+);
+
 // Shared Copy Logic
 const copyToClipboard = async (text: string): Promise<boolean> => {
   const copyFallback = (text: string) => {
@@ -97,7 +104,7 @@ const copyToClipboard = async (text: string): Promise<boolean> => {
 // --- Sub-Components ---
 
 // 1. MermaidBlock: Renders Mermaid Diagrams
-const MermaidBlock: React.FC<{ code: string }> = ({ code }) => {
+const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => void }> = ({ code, onRegenerate }) => {
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -234,7 +241,29 @@ const MermaidBlock: React.FC<{ code: string }> = ({ code }) => {
   };
 
   if (error) {
-    return <CodeBlock language="mermaid" code={code} />;
+    return (
+      <div className="flex flex-col gap-2 my-4">
+         <div className="flex flex-col md:flex-row md:items-center justify-between p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-200 text-xs md:text-sm gap-2">
+             <div className="flex items-center gap-2">
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-red-500">
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                 </svg>
+                 <span className="font-medium">Sơ đồ bị lỗi hiển thị.</span>
+             </div>
+             {onRegenerate && (
+                 <button 
+                   onClick={() => onRegenerate(code)}
+                   className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-all shadow-md group whitespace-nowrap"
+                   title="Yêu cầu AI sửa lại cú pháp Mermaid"
+                 >
+                    <ArrowPathIcon className="group-hover:animate-spin" />
+                    <span className="font-bold">Fix (Sửa lỗi)</span>
+                 </button>
+             )}
+         </div>
+         <CodeBlock language="mermaid" code={code} />
+      </div>
+    );
   }
 
   return (
@@ -470,144 +499,257 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
   );
 };
 
+// 5. CollapsibleSection: Renders a collapsible block for detailed instructions
+const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="my-3 border border-slate-700/80 rounded-lg overflow-hidden bg-slate-900/40 shadow-sm">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/40 hover:bg-slate-800/80 transition-all text-left group"
+      >
+        <span className="font-semibold text-blue-300 text-sm group-hover:text-blue-200 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-500 group-hover:text-blue-400">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+            {title}
+        </span>
+        <span className={`text-slate-500 group-hover:text-white transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+          <ChevronDownIcon />
+        </span>
+      </button>
+      {isOpen && (
+        <div className="px-4 py-4 border-t border-slate-700/50 animate-in slide-in-from-top-1 fade-in duration-200">
+          <div className="space-y-2 text-sm md:text-base leading-relaxed">
+            {children}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 6. TextRenderer: Handles standard text/markdown logic (paragraphs, tables, lists)
+const TextRenderer: React.FC<{ content: string }> = ({ content }) => {
+    if (!content.trim()) return null;
+
+    const lines = content.split('\n');
+    const renderedElements: React.ReactNode[] = [];
+    
+    let tableBuffer: string[] = [];
+    let isTableMode = false;
+    
+    let listBuffer: React.ReactNode[] = [];
+    let isListMode = false;
+
+    const flushTable = (idx: number) => {
+        if (tableBuffer.length > 0) {
+            renderedElements.push(<TableBlock key={`table-${idx}`} rows={tableBuffer} />);
+            tableBuffer = [];
+        }
+    };
+
+    const flushList = (idx: number) => {
+        if (listBuffer.length > 0) {
+            renderedElements.push(
+            <ul key={`list-${idx}`} className="list-disc list-outside ml-5 mb-2 space-y-1">
+                {listBuffer}
+            </ul>
+            );
+            listBuffer = [];
+        }
+    };
+
+    lines.forEach((line, lineIdx) => {
+        const trimmed = line.trim();
+        
+        // --- TABLE MODE ---
+        if (trimmed.startsWith('|') && trimmed.length > 1) {
+            if (isListMode) { flushList(lineIdx); isListMode = false; }
+            isTableMode = true;
+            tableBuffer.push(trimmed);
+            return;
+        } else if (isTableMode) {
+            flushTable(lineIdx);
+            isTableMode = false;
+        }
+
+        // --- LIST MODE ---
+        // Detect unordered list (- or *) or ordered list (1.)
+        const isListItem = trimmed.startsWith('- ') || trimmed.startsWith('* ') || /^\d+\.\s/.test(trimmed);
+        
+        if (isListItem) {
+            if (!isListMode) { isListMode = true; listBuffer = []; }
+            
+            // Remove list marker for content rendering
+            const cleanText = trimmed.replace(/^(-\s|\*\s|\d+\.\s)/, '');
+            
+            // Process inline styles (bold, code)
+            const boldParts = cleanText.split(/(\*\*.*?\*\*)/g);
+            const renderedContent = (
+            <span key={lineIdx}>
+                {boldParts.map((subPart, subIdx) => {
+                    if (subPart.startsWith('**') && subPart.endsWith('**')) {
+                    return <strong key={subIdx} className="font-bold text-white">{subPart.slice(2, -2)}</strong>;
+                    }
+                    const codeParts = subPart.split(/(`.*?`)/g);
+                    return (
+                    <span key={subIdx}>
+                        {codeParts.map((cp, cpIdx) => {
+                        if (cp.startsWith('`') && cp.endsWith('`')) {
+                            return <code key={cpIdx} className="bg-slate-700/50 px-1 py-0.5 rounded text-sky-300 font-mono text-xs">{cp.slice(1, -1)}</code>
+                        }
+                        return cp;
+                        })}
+                    </span>
+                    );
+                })}
+            </span>
+            );
+            
+            listBuffer.push(<li key={`li-${lineIdx}`} className="text-slate-300">{renderedContent}</li>);
+            return;
+        } else {
+            if (isListMode) {
+                flushList(lineIdx);
+                isListMode = false;
+            }
+            
+            // Skip empty lines if they are just formatting
+            if (line === '' && tableBuffer.length === 0) return;
+
+            // --- REGULAR PARAGRAPH ---
+            const boldParts = line.split(/(\*\*.*?\*\*)/g);
+            renderedElements.push(
+            <p key={`p-${lineIdx}`} className="min-h-[1.5em] mb-2">
+                {boldParts.map((subPart, subIdx) => {
+                    if (subPart.startsWith('**') && subPart.endsWith('**')) {
+                    return <strong key={subIdx} className="font-bold text-white">{subPart.slice(2, -2)}</strong>;
+                    }
+                    const codeParts = subPart.split(/(`.*?`)/g);
+                    return (
+                    <span key={subIdx}>
+                        {codeParts.map((cp, cpIdx) => {
+                        if (cp.startsWith('`') && cp.endsWith('`')) {
+                            return <code key={cpIdx} className="bg-slate-700/50 px-1 py-0.5 rounded text-sky-300 font-mono text-xs">{cp.slice(1, -1)}</code>
+                        }
+                        return cp;
+                        })}
+                    </span>
+                    );
+                })}
+            </p>
+            );
+        }
+    });
+    // Flush any remaining buffers
+    flushTable(lines.length);
+    flushList(lines.length);
+
+    return <>{renderedElements}</>;
+};
+
 // --- Main Renderer ---
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
-  // 1. Split by Code Blocks
-  const parts = content.split(/(```[\s\S]*?```)/g);
+export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onRegenerateMermaid }) => {
+  // 1. Tokenize Content
+  // We first split by Code Blocks to ensure we don't mess up code content
+  const codeSplit = content.split(/(```[\s\S]*?```)/g);
+  
+  const tokens: { type: string, content: string, language?: string, title?: string }[] = [];
+  
+  codeSplit.forEach(part => {
+     if (part.startsWith('```')) {
+        const lines = part.split('\n');
+        const language = lines[0].replace('```', '').trim();
+        const code = lines.slice(1, -1).join('\n');
+        tokens.push({ type: 'code', content: code, language });
+     } else {
+        // Now split by Collapsible Markers
+        // Syntax: ::: Title \n content \n :::
+        // Regex to capture the start marker: matches new line or start of string, then :::, then optional title, then end of line
+        // NOTE: We use a capturing group to include the delimiter in the result array
+        const parts = part.split(/(?:^|\n)(:::.*)(?:\n|$)/g);
+        
+        parts.forEach(subPart => {
+           if (subPart.startsWith(':::')) {
+              const markerContent = subPart.substring(3).trim();
+              if (markerContent === '') {
+                 tokens.push({ type: 'collapse-end', content: '' });
+              } else {
+                 tokens.push({ type: 'collapse-start', title: markerContent, content: '' });
+              }
+           } else {
+              // It's just text
+              if (subPart) { // Keep whitespace? The split usually leaves empty strings around delimiters.
+                  tokens.push({ type: 'text', content: subPart });
+              }
+           }
+        });
+     }
+  });
+  
+  // 2. Build Component Tree
+  // We use a stack to manage nesting (though typical usage is just 1 level deep)
+  
+  const rootChildren: React.ReactNode[] = [];
+  
+  // Helper to get the current container to push elements to
+  // If stack is empty, push to rootChildren
+  // If stack has items, push to the children array of the top item
+  const stack: { children: React.ReactNode[], title: string }[] = [];
+  
+  tokens.forEach((token, index) => {
+     const key = `token-${index}`;
+     // Determine current container
+     const currentContainer = stack.length > 0 ? stack[stack.length - 1].children : rootChildren;
+     
+     if (token.type === 'collapse-start') {
+         // Push new section to stack
+         const newSection = { children: [], title: token.title || 'Chi tiết' };
+         stack.push(newSection);
+     } else if (token.type === 'collapse-end') {
+         // Pop from stack and render the CollapsibleSection into the *parent* container
+         if (stack.length > 0) {
+             const finishedSection = stack.pop()!;
+             const parentContainer = stack.length > 0 ? stack[stack.length - 1].children : rootChildren;
+             parentContainer.push(
+                 <CollapsibleSection key={key} title={finishedSection.title}>
+                     {finishedSection.children}
+                 </CollapsibleSection>
+             );
+         }
+     } else if (token.type === 'code') {
+         if (token.language?.toLowerCase() === 'mermaid') {
+             currentContainer.push(
+                <MermaidBlock 
+                    key={key} 
+                    code={token.content} 
+                    onRegenerate={onRegenerateMermaid}
+                />
+             );
+         } else {
+             currentContainer.push(<CodeBlock key={key} language={token.language || ''} code={token.content} />);
+         }
+     } else if (token.type === 'text') {
+         currentContainer.push(<TextRenderer key={key} content={token.content} />);
+     }
+  });
+
+  // Handle unclosed sections gracefully
+  while (stack.length > 0) {
+      const finishedSection = stack.pop()!;
+      const parentContainer = stack.length > 0 ? stack[stack.length - 1].children : rootChildren;
+      parentContainer.push(
+          <CollapsibleSection key={`unclosed-${stack.length}`} title={finishedSection.title}>
+              {finishedSection.children}
+          </CollapsibleSection>
+      );
+  }
 
   return (
     <div className="space-y-2 text-sm md:text-base leading-relaxed break-words">
-      {parts.map((part, index) => {
-        if (part.startsWith('```')) {
-          // --- CODE BLOCK ---
-          const lines = part.split('\n');
-          const language = lines[0].replace('```', '').trim();
-          const code = lines.slice(1, -1).join('\n');
-          
-          if (language.toLowerCase() === 'mermaid') {
-             return <MermaidBlock key={index} code={code} />;
-          }
-
-          return <CodeBlock key={index} language={language} code={code} />;
-        } else {
-          // --- TEXT & TABLE PARSING ---
-          const lines = part.split('\n');
-          const renderedElements: React.ReactNode[] = [];
-          
-          let tableBuffer: string[] = [];
-          let isTableMode = false;
-          
-          let listBuffer: React.ReactNode[] = [];
-          let isListMode = false;
-
-          const flushTable = (idx: number) => {
-             if (tableBuffer.length > 0) {
-                 renderedElements.push(<TableBlock key={`table-${idx}`} rows={tableBuffer} />);
-                 tableBuffer = [];
-             }
-          };
-
-          const flushList = (idx: number) => {
-              if (listBuffer.length > 0) {
-                  renderedElements.push(
-                    <ul key={`list-${idx}`} className="list-disc list-outside ml-5 mb-2 space-y-1">
-                      {listBuffer}
-                    </ul>
-                  );
-                  listBuffer = [];
-              }
-          };
-
-          lines.forEach((line, lineIdx) => {
-             const trimmed = line.trim();
-             
-             // --- TABLE MODE ---
-             if (trimmed.startsWith('|') && trimmed.length > 1) {
-                 if (isListMode) { flushList(lineIdx); isListMode = false; }
-                 isTableMode = true;
-                 tableBuffer.push(trimmed);
-                 return;
-             } else if (isTableMode) {
-                 flushTable(lineIdx);
-                 isTableMode = false;
-             }
-
-             // --- LIST MODE ---
-             // Detect unordered list (- or *) or ordered list (1.)
-             const isListItem = trimmed.startsWith('- ') || trimmed.startsWith('* ') || /^\d+\.\s/.test(trimmed);
-             
-             if (isListItem) {
-                 if (!isListMode) { isListMode = true; listBuffer = []; }
-                 
-                 // Remove list marker for content rendering
-                 const cleanText = trimmed.replace(/^(-\s|\*\s|\d+\.\s)/, '');
-                 
-                 // Process inline styles (bold, code)
-                 const boldParts = cleanText.split(/(\*\*.*?\*\*)/g);
-                 const renderedContent = (
-                    <span key={lineIdx}>
-                        {boldParts.map((subPart, subIdx) => {
-                          if (subPart.startsWith('**') && subPart.endsWith('**')) {
-                            return <strong key={subIdx} className="font-bold text-white">{subPart.slice(2, -2)}</strong>;
-                          }
-                          const codeParts = subPart.split(/(`.*?`)/g);
-                          return (
-                            <span key={subIdx}>
-                              {codeParts.map((cp, cpIdx) => {
-                                if (cp.startsWith('`') && cp.endsWith('`')) {
-                                  return <code key={cpIdx} className="bg-slate-700/50 px-1 py-0.5 rounded text-sky-300 font-mono text-xs">{cp.slice(1, -1)}</code>
-                                }
-                                return cp;
-                              })}
-                            </span>
-                          );
-                        })}
-                    </span>
-                 );
-                 
-                 listBuffer.push(<li key={`li-${lineIdx}`} className="text-slate-300">{renderedContent}</li>);
-                 return;
-             } else {
-                 if (isListMode) {
-                     flushList(lineIdx);
-                     isListMode = false;
-                 }
-                 
-                 // Skip empty lines if they are just formatting
-                 if (line === '' && tableBuffer.length === 0) return;
-
-                 // --- REGULAR PARAGRAPH ---
-                 const boldParts = line.split(/(\*\*.*?\*\*)/g);
-                 renderedElements.push(
-                    <p key={`p-${lineIdx}`} className="min-h-[1.5em] mb-2">
-                        {boldParts.map((subPart, subIdx) => {
-                          if (subPart.startsWith('**') && subPart.endsWith('**')) {
-                            return <strong key={subIdx} className="font-bold text-white">{subPart.slice(2, -2)}</strong>;
-                          }
-                          const codeParts = subPart.split(/(`.*?`)/g);
-                          return (
-                            <span key={subIdx}>
-                              {codeParts.map((cp, cpIdx) => {
-                                if (cp.startsWith('`') && cp.endsWith('`')) {
-                                  return <code key={cpIdx} className="bg-slate-700/50 px-1 py-0.5 rounded text-sky-300 font-mono text-xs">{cp.slice(1, -1)}</code>
-                                }
-                                return cp;
-                              })}
-                            </span>
-                          );
-                        })}
-                    </p>
-                 );
-             }
-          });
-          // Flush any remaining buffers
-          flushTable(lines.length);
-          flushList(lines.length);
-
-          return <div key={index}>{renderedElements}</div>;
-        }
-      })}
+      {rootChildren}
     </div>
   );
 };

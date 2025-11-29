@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { streamChatResponse } from './services/geminiService';
 import { Message, Role, ChatSession } from './types';
@@ -385,7 +383,7 @@ export default function App() {
              const newMsgs = [...s.messages, { 
                 id: Date.now().toString(), 
                 role: Role.MODEL, 
-                text: "Tôi gặp lỗi khi kết nối với máy chủ. Vui lòng kiểm tra API key hoặc kết nối internet.",
+                text: "Tôi gặp lỗi khi kết nối với máy chủ. Vui lòng kiểm tra API Key hoặc mạng.",
                 timestamp: new Date(),
                 isError: true
              }];
@@ -499,6 +497,12 @@ export default function App() {
 
   const handlePromptSelect = (prompt: string) => {
     setInputValue(prompt);
+  };
+
+  // Callback to regenerate mermaid chart
+  const handleRegenerateMermaid = (code: string) => {
+    const prompt = `Sơ đồ Mermaid sau đây bị lỗi render. Hãy sửa lại cú pháp (chú ý escaping, dấu ngoặc kép, và ID không chứa ký tự lạ). Trả về code đã sửa:\n\n\`\`\`mermaid\n${code}\n\`\`\``;
+    sendChatMessage(prompt, null);
   };
 
   const handleVoiceInput = () => {
@@ -704,7 +708,10 @@ export default function App() {
                       </div>
                     ) : (
                       <>
-                        <MarkdownRenderer content={msg.text} />
+                        <MarkdownRenderer 
+                            content={msg.text} 
+                            onRegenerateMermaid={handleRegenerateMermaid}
+                        />
                         
                         <div className="flex items-center justify-between mt-2">
                             <div className={`text-[10px] opacity-60 ${msg.role === Role.USER ? 'text-blue-200' : 'text-slate-400'}`}>
