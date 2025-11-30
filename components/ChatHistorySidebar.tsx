@@ -15,14 +15,14 @@ interface ChatHistorySidebarProps {
 }
 
 const PlusIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
   </svg>
 );
 
-const ChatIcon = () => (
+const ChatBubbleIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
   </svg>
 );
 
@@ -114,7 +114,7 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
       {/* Overlay for mobile */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 md:hidden"
           onClick={onClose}
         />
       )}
@@ -122,15 +122,18 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
       {/* Sidebar Container */}
       <div className={`
         fixed md:static inset-y-0 left-0 z-30
-        w-72 bg-slate-900 border-r border-slate-800
+        w-80 bg-slate-950/90 border-r border-slate-800/50 backdrop-blur-xl
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-        flex flex-col
+        flex flex-col shadow-2xl
       `}>
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Lịch sử chat</h2>
-            <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white">
+        <div className="p-5 border-b border-slate-800/50 flex items-center justify-between bg-slate-900/50">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">History</h2>
+            </div>
+            <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white transition-colors">
                 <CloseIcon />
             </button>
         </div>
@@ -142,18 +145,19 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
               onCreateSession();
               if (window.innerWidth < 768) onClose();
             }}
-            className="w-full flex items-center gap-2 justify-center bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-lg font-medium transition-colors shadow-lg shadow-blue-900/20"
+            className="group w-full flex items-center gap-3 justify-center bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-4 py-3.5 rounded-xl font-medium transition-all shadow-lg shadow-indigo-900/30 active:scale-[0.98] border border-indigo-500/50"
           >
             <PlusIcon />
-            <span>Đoạn chat mới</span>
+            <span className="text-sm font-semibold tracking-wide">Cuộc hội thoại mới</span>
           </button>
         </div>
 
         {/* Session List */}
-        <div className="flex-1 overflow-y-auto px-2 custom-scrollbar space-y-1">
+        <div className="flex-1 overflow-y-auto px-3 py-2 custom-scrollbar space-y-1">
           {sessions.length === 0 ? (
-            <div className="text-center text-slate-500 py-8 text-sm px-4">
-              Chưa có lịch sử chat.<br/>Hãy bắt đầu cuộc trò chuyện mới!
+            <div className="flex flex-col items-center justify-center h-40 text-slate-500 space-y-2 opacity-60">
+              <ChatBubbleIcon />
+              <p className="text-xs text-center">Chưa có lịch sử chat.</p>
             </div>
           ) : (
             sessions.map((session) => (
@@ -166,15 +170,15 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
                     }
                 }}
                 className={`
-                  group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors text-sm relative
+                  group flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 text-sm relative border
                   ${currentSessionId === session.id 
-                    ? 'bg-slate-800 text-blue-400 font-medium border border-slate-700' 
-                    : 'text-slate-300 hover:bg-slate-800/50 hover:text-white border border-transparent'}
+                    ? 'bg-slate-800/60 border-slate-700 text-indigo-300 font-medium shadow-sm' 
+                    : 'text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-slate-200'}
                 `}
               >
                 {/* Editing Mode */}
                 {editingId === session.id ? (
-                    <div className="flex items-center w-full gap-2">
+                    <div className="flex items-center w-full gap-2 animate-in fade-in duration-200">
                         <input
                             ref={inputRef}
                             type="text"
@@ -182,15 +186,15 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
                             onChange={(e) => setEditTitle(e.target.value)}
                             onKeyDown={(e) => handleKeyDown(e, session.id)}
                             onClick={(e) => e.stopPropagation()}
-                            className="flex-1 bg-slate-950 text-white px-2 py-1 rounded text-xs border border-blue-500 focus:outline-none"
+                            className="flex-1 bg-slate-900 text-slate-200 px-2 py-1.5 rounded-lg text-xs border border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
-                        <button onClick={(e) => { e.stopPropagation(); saveEditing(session.id); }} className="p-1 hover:bg-slate-700 rounded"><CheckIcon /></button>
-                        <button onClick={(e) => { e.stopPropagation(); cancelEditing(); }} className="p-1 hover:bg-slate-700 rounded"><CancelIcon /></button>
+                        <button onClick={(e) => { e.stopPropagation(); saveEditing(session.id); }} className="p-1.5 hover:bg-indigo-500/20 text-indigo-400 rounded-md transition-colors"><CheckIcon /></button>
+                        <button onClick={(e) => { e.stopPropagation(); cancelEditing(); }} className="p-1.5 hover:bg-red-500/20 text-red-400 rounded-md transition-colors"><CancelIcon /></button>
                     </div>
                 ) : (
                     <>
-                        <div className="flex-shrink-0">
-                             {session.isPinned ? <PinIcon filled={true} /> : <ChatIcon />}
+                        <div className={`flex-shrink-0 transition-colors ${currentSessionId === session.id ? 'text-indigo-400' : 'text-slate-600 group-hover:text-slate-500'}`}>
+                             {session.isPinned ? <PinIcon filled={true} /> : <ChatBubbleIcon />}
                         </div>
                         
                         <div className="flex-1 truncate relative">
@@ -198,25 +202,25 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
                         </div>
 
                         {/* Action Buttons (Visible on Hover or Active) */}
-                        <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${currentSessionId === session.id ? 'opacity-100' : ''}`}>
+                        <div className={`flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-200 absolute right-2 bg-slate-900/90 shadow-sm rounded-lg backdrop-blur-sm border border-slate-800 ${currentSessionId === session.id ? '' : 'translate-x-2 group-hover:translate-x-0'}`}>
                             <button
                                 onClick={(e) => onTogglePinSession(session.id, e)}
-                                className="p-1.5 rounded-md text-slate-500 hover:text-yellow-400 hover:bg-slate-700/50"
+                                className="p-1.5 rounded-md text-slate-500 hover:text-yellow-400 hover:bg-slate-800"
                                 title={session.isPinned ? "Bỏ ghim" : "Ghim"}
                             >
                                 <PinIcon filled={!!session.isPinned} />
                             </button>
                             <button
                                 onClick={(e) => startEditing(session.id, session.title, e)}
-                                className="p-1.5 rounded-md text-slate-500 hover:text-blue-400 hover:bg-slate-700/50"
+                                className="p-1.5 rounded-md text-slate-500 hover:text-blue-400 hover:bg-slate-800"
                                 title="Đổi tên"
                             >
                                 <PencilIcon />
                             </button>
                             <button
                                 onClick={(e) => onDeleteSession(session.id, e)}
-                                className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-slate-700/50"
-                                title="Xóa đoạn chat này"
+                                className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-slate-800"
+                                title="Xóa"
                             >
                                 <TrashIcon />
                             </button>
@@ -229,8 +233,8 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
         </div>
         
         {/* Footer info */}
-        <div className="p-4 border-t border-slate-800 text-[10px] text-slate-600 text-center">
-            GPM Automate Assistant v1.1
+        <div className="p-4 border-t border-slate-800/50 text-[10px] text-slate-600 text-center bg-slate-900/30 backdrop-blur-sm">
+            <span className="opacity-50">GPM Automate Assistant AI</span>
         </div>
       </div>
     </>

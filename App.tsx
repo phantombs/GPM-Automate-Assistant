@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { streamChatResponse } from './services/geminiService';
 import { Message, Role, ChatSession } from './types';
@@ -8,7 +9,7 @@ import { HtmlAnalysisModal } from './components/HtmlAnalysisModal';
 import { PromptLibraryModal } from './components/PromptLibraryModal';
 import { FakerGeneratorModal } from './components/FakerGeneratorModal';
 
-// Icons
+// --- Icons ---
 const SendIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
     <path d="M3.478 2.404a.75.75 0 00-.926.941l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.404z" />
@@ -46,7 +47,7 @@ const DownloadIcon = () => (
 );
 
 const RobotIcon = () => (
-    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg">
+    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 border border-white/10">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12h1.5m13.5 0h1.5M17.25 3v1.5M12 18.75V21m-4.72-14.25l-1.35-1.35M18.07 4.5l-1.35 1.35M18.07 4.5l-1.35 1.35M13.5 10.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm9.75 0A9.75 9.75 0 1112 2.25 9.75 9.75 0 0123.25 10.5z" />
         </svg>
@@ -89,7 +90,7 @@ const DiceIcon = () => (
   </svg>
 );
 
-// GPM Node Commands for Auto-complete
+// --- Constants & Configs ---
 const NODE_COMMANDS = [
   { label: '/click', desc: 'Click vào phần tử', value: 'Hướng dẫn sử dụng Node Click trong GPM' },
   { label: '/type', desc: 'Nhập văn bản (Type Text)', value: 'Cách dùng Node Type Text' },
@@ -108,7 +109,6 @@ const NODE_COMMANDS = [
   { label: '/faker', desc: 'Tạo dữ liệu giả (Random)', value: '/faker' },
 ];
 
-// Helper to sort sessions
 const sortSessions = (sessions: ChatSession[]) => {
   return [...sessions].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;
@@ -117,6 +117,71 @@ const sortSessions = (sessions: ChatSession[]) => {
   });
 };
 
+// --- Sub-Components ---
+const WelcomeHero = ({ onAction }: { onAction: (text: string, isTool?: string) => void }) => {
+    const cards = [
+        {
+            icon: <CodeBracketIcon />,
+            title: "Phân tích HTML",
+            desc: "Tạo XPath chuẩn từ mã HTML",
+            action: () => onAction('', 'html')
+        },
+        {
+            icon: <DiceIcon />,
+            title: "Tạo dữ liệu giả",
+            desc: "Random tên, email, sđt...",
+            action: () => onAction('', 'faker')
+        },
+        {
+            icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-green-400"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+            title: "Debug lỗi",
+            desc: "Giải thích tại sao kịch bản dừng",
+            action: () => onAction("Kịch bản của tôi đang bị lỗi dừng đột ngột, hãy hướng dẫn tôi cách debug (tìm lỗi) chi tiết.")
+        },
+        {
+            icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-400"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>,
+            title: "Viết kịch bản",
+            desc: "Login, Đọc Excel, Xử lý data",
+            action: () => onAction("Hãy hướng dẫn tôi viết kịch bản đăng nhập vào một trang web và đọc dữ liệu từ file Excel.")
+        }
+    ];
+
+    return (
+        <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto px-4 animate-fade-in-up pb-20">
+            <div className="mb-8 relative">
+                 <div className="absolute -inset-4 bg-indigo-500/20 blur-xl rounded-full animate-pulse-slow"></div>
+                 <RobotIcon />
+            </div>
+            <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 mb-3 text-center tracking-tight">
+                Trợ lý GPM Automate
+            </h2>
+            <p className="text-slate-400 text-center mb-10 max-w-lg leading-relaxed">
+                Tôi có thể giúp bạn thiết kế luồng tự động hóa, tạo XPath chuẩn, phân tích lỗi và tạo dữ liệu giả lập.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                {cards.map((card, idx) => (
+                    <button 
+                        key={idx}
+                        onClick={card.action}
+                        className="group flex items-start gap-4 p-4 rounded-xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/50 hover:border-indigo-500/50 transition-all text-left shadow-lg hover:shadow-indigo-500/10"
+                    >
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-700 group-hover:border-indigo-500/50 group-hover:bg-indigo-500/10 transition-colors">
+                            {card.icon}
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-slate-200 group-hover:text-white text-sm mb-1">{card.title}</h3>
+                            <p className="text-xs text-slate-500 group-hover:text-slate-400">{card.desc}</p>
+                        </div>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+
+// --- Main App Component ---
 export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -143,9 +208,10 @@ export default function App() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null); // Use any for webkitSpeechRecognition
+  const recognitionRef = useRef<any>(null); 
 
-  // Load sessions from local storage
+  // --- Effects & Logic ---
+
   useEffect(() => {
     const savedSessions = localStorage.getItem('gpm_chat_sessions');
     if (savedSessions) {
@@ -178,19 +244,17 @@ export default function App() {
     }
   }, []);
 
-  // Save sessions
   useEffect(() => {
     if (sessions.length > 0) {
       localStorage.setItem('gpm_chat_sessions', JSON.stringify(sessions));
     }
   }, [sessions]);
 
-  // Scroll to bottom
   useEffect(() => {
     scrollToBottom();
   }, [sessions, currentSessionId, isThinking]);
 
-  // Init Speech Recognition
+  // Speech Recognition
   useEffect(() => {
     if ('webkitSpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition;
@@ -206,7 +270,6 @@ export default function App() {
       };
 
       recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error', event.error);
         setIsListening(false);
       };
 
@@ -217,7 +280,7 @@ export default function App() {
   }, []);
 
   const scrollToBottom = () => {
-    if (editingMessageId) return; // Don't scroll when editing
+    if (editingMessageId) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -403,7 +466,6 @@ export default function App() {
     setAttachedFile(null);
   };
 
-  // Edit Message Handlers
   const startEditingMessage = (msg: Message) => {
     setEditingMessageId(msg.id);
     setEditedMessageContent(msg.text);
@@ -417,33 +479,27 @@ export default function App() {
   const handleSaveEdit = async (messageId: string) => {
     if (!currentSessionId || !editedMessageContent.trim()) return;
 
-    // 1. Get session and find index of message
     const session = sessions.find(s => s.id === currentSessionId);
     if (!session) return;
     const msgIndex = session.messages.findIndex(m => m.id === messageId);
     if (msgIndex === -1) return;
 
-    // 2. Create new history: Truncate everything AFTER the edited message
-    // The edited message text is updated
     const updatedUserMsg: Message = {
         ...session.messages[msgIndex],
         text: editedMessageContent,
         timestamp: new Date()
     };
     
-    // Keep messages before the edited one + the edited one
     const newHistory = [
         ...session.messages.slice(0, msgIndex),
         updatedUserMsg
     ];
 
-    // 3. Update state immediately
     updateCurrentSessionMessages(newHistory);
     setEditingMessageId(null);
     setEditedMessageContent('');
     setIsThinking(true);
 
-    // 4. Trigger AI Response (Regenerate)
     try {
         const botMsgId = (Date.now() + 1).toString();
         const messagesWithBotPlaceholder = [
@@ -451,11 +507,8 @@ export default function App() {
             { id: botMsgId, role: Role.MODEL, text: '', timestamp: new Date() }
         ];
         updateCurrentSessionMessages(messagesWithBotPlaceholder);
-
         const contextForStream = newHistory.slice(0, -1).slice(-10); 
-        
         const stream = await streamChatResponse(contextForStream, updatedUserMsg.text, null);
-
         let fullResponse = '';
         for await (const chunk of stream) {
             fullResponse += chunk;
@@ -469,7 +522,6 @@ export default function App() {
                 return s;
             }));
         }
-
     } catch (error) {
         setSessions(prev => prev.map(s => {
             if (s.id === currentSessionId) {
@@ -489,7 +541,6 @@ export default function App() {
     }
   };
 
-
   const handleHtmlSubmit = (html: string) => {
     const analysisPrompt = `Hãy phân tích đoạn mã HTML sau và tạo bảng XPath chuẩn cho các phần tử quan trọng:\n\n\`\`\`html\n${html}\n\`\`\``;
     sendChatMessage(analysisPrompt, null);
@@ -499,9 +550,14 @@ export default function App() {
     setInputValue(prompt);
   };
 
-  // Callback to regenerate mermaid chart
-  const handleRegenerateMermaid = (code: string) => {
-    const prompt = `Sơ đồ Mermaid sau đây bị lỗi render. Hãy sửa lại cú pháp (chú ý escaping, dấu ngoặc kép, và ID không chứa ký tự lạ). Trả về code đã sửa:\n\n\`\`\`mermaid\n${code}\n\`\`\``;
+  const handleFixContent = (content: string) => {
+    const isMermaid = /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline)/.test(content);
+    let prompt = '';
+    if (isMermaid && !content.includes(':::')) {
+        prompt = `Sơ đồ Mermaid sau đây bị lỗi render. Hãy sửa lại cú pháp (chú ý escaping, dấu ngoặc kép, và ID không chứa ký tự lạ). Trả về code đã sửa:\n\n\`\`\`mermaid\n${content}\n\`\`\``;
+    } else {
+        prompt = `Nội dung hướng dẫn sau đây bị lỗi định dạng (thường do thiếu dòng trống trước/sau block ':::'). Hãy định dạng lại Markdown chuẩn xác để hiển thị đúng các khối Collapsible:\n\n${content}`;
+    }
     sendChatMessage(prompt, null);
   };
 
@@ -537,8 +593,6 @@ export default function App() {
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputValue(val);
-
-    // Regex Check for Slash Command at end of string or isolated
     const match = val.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
     if (match) {
       setSlashQuery(match[1]);
@@ -552,20 +606,15 @@ export default function App() {
     if (cmd.value === '/faker') {
         setIsFakerModalOpen(true);
         setShowSlashMenu(false);
-        // Clear the slash command text from input
         const newVal = inputValue.replace(/(?:^|\s)\/faker$/, '');
         setInputValue(newVal.trim());
         return;
     }
-
-    // Replace the slash command with the value
     const newVal = inputValue.replace(/(?:^|\s)\/([a-zA-Z0-9]*)$/, (match) => {
-        // preserve the leading space if any
         return match.startsWith(' ') ? ' ' + cmd.value : cmd.value;
     });
     setInputValue(newVal);
     setShowSlashMenu(false);
-    // Focus back on textarea if needed, though react state update handles re-render
   };
 
   const handleFakerInsert = (text: string) => {
@@ -589,13 +638,27 @@ export default function App() {
     }
   };
 
+  const handleWelcomeAction = (text: string, isTool?: string) => {
+      if (isTool === 'html') {
+          setIsHtmlModalOpen(true);
+      } else if (isTool === 'faker') {
+          setIsFakerModalOpen(true);
+      } else {
+          setInputValue(text);
+          // Optional: Auto send
+          // sendChatMessage(text, null);
+      }
+  };
+
   const filteredCommands = NODE_COMMANDS.filter(c => 
     c.label.toLowerCase().includes(slashQuery.toLowerCase()) || 
     c.desc.toLowerCase().includes(slashQuery.toLowerCase())
   );
 
+  const isEmptyChat = messages.length <= 1;
+
   return (
-    <div className="flex h-full bg-slate-900 overflow-hidden">
+    <div className="flex h-full bg-slate-950 overflow-hidden text-slate-100 font-sans">
       {/* Modals */}
       <HtmlAnalysisModal 
         isOpen={isHtmlModalOpen} 
@@ -629,224 +692,243 @@ export default function App() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full w-full relative">
-        {/* Header */}
-        <header className="flex items-center justify-between px-4 py-3 bg-slate-800/50 backdrop-blur-md border-b border-slate-700/50 flex-shrink-0">
+        {/* Header - Glassmorphic */}
+        <header className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-slate-900/50 backdrop-blur-md border-b border-white/5 transition-all">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-slate-400 hover:text-white rounded-lg">
+            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-slate-400 hover:text-white rounded-lg transition-colors">
               <MenuIcon />
             </button>
             <div className="flex items-center gap-3">
-              <RobotIcon />
+              <div className="md:hidden"><RobotIcon /></div>
               <div className="min-w-0">
                 <h1 className="text-base md:text-lg font-bold text-white tracking-tight truncate flex items-center gap-2">
                   {currentSession?.title || "Trợ lý GPM"}
                   {currentSession?.isPinned && (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-blue-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-indigo-400">
                       <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clipRule="evenodd" />
                     </svg>
                   )}
                 </h1>
-                <p className="text-[10px] md:text-xs text-slate-400 truncate">Chuyên gia Tự động hóa & Xử lý lỗi</p>
               </div>
             </div>
           </div>
           
-          <button 
-            onClick={handleExportChat}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-            title="Xuất nội dung chat"
-          >
-            <DownloadIcon />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+                onClick={handleExportChat}
+                className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                title="Xuất nội dung chat"
+            >
+                <DownloadIcon />
+            </button>
+          </div>
         </header>
 
         {/* Messages */}
-        <main className="flex-1 overflow-y-auto px-2 md:px-6 py-4 custom-scrollbar scroll-smooth">
-          <div className="max-w-4xl mx-auto space-y-6">
-            {messages.map((msg) => (
-              <div key={msg.id} className={`flex w-full ${msg.role === Role.USER ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex gap-3 max-w-[90%] md:max-w-[80%] ${msg.role === Role.USER ? 'flex-row-reverse' : 'flex-row'}`}>
-                  
-                  {/* Avatar */}
-                  <div className="flex-shrink-0 mt-1 hidden md:block">
-                    {msg.role === Role.USER ? (
-                      <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center group relative cursor-pointer">
-                          <span className="text-xs font-bold text-slate-300">BẠN</span>
-                      </div>
-                    ) : <RobotIcon />}
-                  </div>
-
-                  {/* Message Content Bubble */}
-                  <div className={`relative p-3 md:p-4 rounded-2xl shadow-sm overflow-hidden group/msg transition-all w-full
-                    ${msg.role === Role.USER ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'} 
-                    ${msg.isError ? 'border-red-500 bg-red-900/20 text-red-200' : ''}
-                  `}>
+        <main className="flex-1 overflow-y-auto px-2 md:px-0 pt-20 pb-40 custom-scrollbar scroll-smooth">
+          {isEmptyChat ? (
+             <WelcomeHero onAction={handleWelcomeAction} />
+          ) : (
+            <div className="max-w-4xl mx-auto space-y-8 px-4">
+                {messages.slice(1).map((msg) => ( // Skip initial greeting in rendered list to look cleaner if desired, or keep it. Let's keep it but styling differs.
+                <div key={msg.id} className={`flex w-full ${msg.role === Role.USER ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+                    <div className={`flex gap-4 max-w-[95%] md:max-w-[85%] ${msg.role === Role.USER ? 'flex-row-reverse' : 'flex-row'}`}>
                     
-                    {/* Editing Mode */}
-                    {editingMessageId === msg.id ? (
-                      <div className="flex flex-col gap-2 w-full min-w-[250px]">
-                        <textarea
-                          value={editedMessageContent}
-                          onChange={(e) => setEditedMessageContent(e.target.value)}
-                          className="w-full bg-slate-900/50 text-white p-2 rounded border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-300 text-sm resize-y min-h-[80px]"
-                          autoFocus
-                        />
-                        <div className="flex justify-end gap-2">
-                           <button 
-                              onClick={cancelEditingMessage}
-                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-medium transition-colors flex items-center gap-1"
-                            >
-                              <XMarkIcon /> Hủy
-                            </button>
-                            <button 
-                              onClick={() => handleSaveEdit(msg.id)}
-                              className="px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-xs font-medium transition-colors flex items-center gap-1"
-                            >
-                              <CheckIcon /> Lưu & Hỏi lại
-                            </button>
+                    {/* Avatar */}
+                    <div className="flex-shrink-0 mt-1 hidden md:block">
+                        {msg.role === Role.USER ? (
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                            <span className="text-[10px] font-bold text-white">YOU</span>
                         </div>
-                      </div>
-                    ) : (
-                      <>
-                        <MarkdownRenderer 
-                            content={msg.text} 
-                            onRegenerateMermaid={handleRegenerateMermaid}
-                        />
-                        
-                        <div className="flex items-center justify-between mt-2">
-                            <div className={`text-[10px] opacity-60 ${msg.role === Role.USER ? 'text-blue-200' : 'text-slate-400'}`}>
-                              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
+                        ) : <RobotIcon />}
+                    </div>
 
-                            {/* Edit Button (Only for User) */}
-                            {msg.role === Role.USER && !isThinking && (
-                              <button 
-                                onClick={() => startEditingMessage(msg)}
-                                className="opacity-0 group-hover/msg:opacity-100 p-1 text-blue-200 hover:text-white hover:bg-blue-500 rounded transition-all"
-                                title="Sửa tin nhắn"
-                              >
-                                <PencilSquareIcon />
-                              </button>
-                            )}
+                    {/* Message Content Bubble */}
+                    <div className={`relative p-4 md:p-5 rounded-2xl shadow-sm overflow-hidden group/msg transition-all w-full
+                        ${msg.role === Role.USER 
+                            ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-tr-sm shadow-indigo-500/10' 
+                            : 'bg-slate-800/60 text-slate-200 rounded-tl-sm border border-slate-700/50 backdrop-blur-sm'} 
+                        ${msg.isError ? 'border-red-500/50 bg-red-900/10 text-red-200' : ''}
+                    `}>
+                        
+                        {/* Editing Mode */}
+                        {editingMessageId === msg.id ? (
+                        <div className="flex flex-col gap-3 w-full min-w-[300px]">
+                            <textarea
+                            value={editedMessageContent}
+                            onChange={(e) => setEditedMessageContent(e.target.value)}
+                            className="w-full bg-slate-900/80 text-white p-3 rounded-lg border border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-sm resize-y min-h-[100px]"
+                            autoFocus
+                            />
+                            <div className="flex justify-end gap-2">
+                            <button 
+                                onClick={cancelEditingMessage}
+                                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-md text-xs font-medium transition-colors flex items-center gap-1"
+                                >
+                                <XMarkIcon /> Hủy
+                                </button>
+                                <button 
+                                onClick={() => handleSaveEdit(msg.id)}
+                                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded-md text-xs font-medium transition-colors flex items-center gap-1 shadow-lg shadow-green-900/20"
+                                >
+                                <CheckIcon /> Lưu & Hỏi lại
+                                </button>
+                            </div>
                         </div>
-                      </>
-                    )}
-                  </div>
+                        ) : (
+                        <>
+                            <div className="prose prose-invert max-w-none">
+                                <MarkdownRenderer 
+                                    content={msg.text} 
+                                    onFixContent={handleFixContent}
+                                />
+                            </div>
+                            
+                            <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
+                                <div className={`text-[10px] opacity-50 font-mono ${msg.role === Role.USER ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+
+                                {/* Edit Button */}
+                                {msg.role === Role.USER && !isThinking && (
+                                <button 
+                                    onClick={() => startEditingMessage(msg)}
+                                    className="opacity-0 group-hover/msg:opacity-100 p-1.5 text-indigo-200 hover:text-white hover:bg-white/10 rounded transition-all"
+                                    title="Sửa tin nhắn"
+                                >
+                                    <PencilSquareIcon />
+                                </button>
+                                )}
+                            </div>
+                        </>
+                        )}
+                    </div>
+                    </div>
                 </div>
-              </div>
-            ))}
-            {isThinking && (
-              <div className="flex justify-start w-full">
-                <div className="flex gap-3">
+                ))}
+            </div>
+          )}
+          
+          {/* Thinking Indicator */}
+          {isThinking && (
+              <div className="max-w-4xl mx-auto px-4 mt-6 animate-pulse">
+                <div className="flex gap-4">
                    <div className="hidden md:block"><RobotIcon /></div>
-                  <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none border border-slate-700 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                   <div className="bg-slate-800/50 p-4 rounded-2xl rounded-tl-none border border-slate-700/50 flex items-center gap-2 w-fit">
+                    <div className="text-xs text-indigo-300 font-mono">Đang phân tích...</div>
+                    <div className="flex gap-1">
+                        <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
             <div ref={messagesEndRef} />
-          </div>
         </main>
 
-        {/* Input Area */}
-        <footer 
-            className={`p-3 md:p-4 bg-slate-900 border-t border-slate-800 flex-shrink-0 z-10 transition-colors duration-200 relative ${isDragging ? 'bg-slate-800 border-blue-500' : ''}`}
+        {/* Input Dock - Floating Design */}
+        <div 
+            className={`absolute bottom-0 left-0 right-0 p-4 md:p-6 z-30 pointer-events-none flex flex-col items-center justify-end transition-all`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
           {isDragging && (
-            <div className="absolute inset-0 bg-blue-600/10 backdrop-blur-sm flex items-center justify-center z-50 border-2 border-dashed border-blue-500 rounded-t-xl">
-              <div className="text-blue-400 font-bold text-lg pointer-events-none animate-pulse">Thả file vào đây để đính kèm</div>
+            <div className="absolute inset-0 bg-indigo-500/10 backdrop-blur-sm flex items-center justify-center z-50 border-2 border-dashed border-indigo-500 rounded-t-xl pointer-events-auto">
+              <div className="text-indigo-300 font-bold text-lg pointer-events-none animate-pulse flex flex-col items-center gap-2">
+                 <AttachIcon />
+                 <span>Thả file vào đây để phân tích</span>
+              </div>
             </div>
           )}
 
-          {/* Slash Command Menu */}
+          {/* Slash Menu */}
           {showSlashMenu && filteredCommands.length > 0 && (
-             <div className="absolute bottom-full left-0 mb-2 ml-16 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
-                <div className="p-2 bg-slate-900/50 border-b border-slate-700 text-xs text-slate-400 font-medium">
-                    Gợi ý lệnh GPM (Dùng phím mũi tên hoặc click)
+             <div className="pointer-events-auto mb-2 w-full max-w-2xl bg-slate-800/90 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200">
+                <div className="p-2 bg-slate-900/50 border-b border-slate-700 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    Gợi ý lệnh (Dùng phím mũi tên)
                 </div>
-                <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
                     {filteredCommands.map((cmd, idx) => (
                         <button
                             key={idx}
                             onClick={() => handleSelectSlashCommand(cmd)}
-                            className="w-full text-left px-4 py-2 hover:bg-blue-600/20 hover:text-blue-300 text-slate-300 flex items-center gap-3 transition-colors"
+                            className="w-full text-left px-3 py-2 hover:bg-indigo-600/20 hover:text-indigo-200 text-slate-300 flex items-center gap-3 transition-colors rounded-lg group"
                         >
-                            <div className="p-1 bg-purple-500/10 rounded">
+                            <div className="p-1.5 bg-slate-900 border border-slate-700 rounded text-purple-400 group-hover:border-purple-500/50">
                                 <CommandIcon />
                             </div>
                             <div>
-                                <div className="font-bold text-sm text-purple-400">{cmd.label}</div>
-                                <div className="text-xs opacity-70 truncate">{cmd.desc}</div>
+                                <div className="font-bold text-sm text-slate-200 group-hover:text-purple-300">{cmd.label}</div>
+                                <div className="text-xs opacity-60 truncate">{cmd.desc}</div>
                             </div>
                         </button>
                     ))}
                 </div>
              </div>
           )}
-
-          <div className="max-w-4xl mx-auto">
-            {attachedFile && (
-              <div className="flex items-center gap-2 mb-2 bg-slate-800 px-3 py-1.5 rounded-lg w-fit text-sm text-blue-300 border border-blue-900/50">
-                  <span className="truncate max-w-[200px]">{attachedFile.name}</span>
-                  <button onClick={() => setAttachedFile(null)} className="hover:text-red-400 ml-1">✕</button>
+          
+          {attachedFile && (
+              <div className="pointer-events-auto mb-2 bg-slate-800/90 border border-indigo-500/30 px-4 py-2 rounded-lg text-sm text-indigo-300 shadow-lg flex items-center gap-3 w-fit max-w-2xl animate-in slide-in-from-bottom-2">
+                  <div className="p-1 bg-indigo-500/20 rounded"><AttachIcon /></div>
+                  <span className="truncate max-w-[200px] font-medium">{attachedFile.name}</span>
+                  <button onClick={() => setAttachedFile(null)} className="hover:bg-slate-700 p-1 rounded-full text-slate-400 hover:text-white transition-colors">✕</button>
               </div>
-            )}
+          )}
 
-            <div className="relative flex items-end gap-2 bg-slate-800 p-2 rounded-xl border border-slate-700 focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
-              <div className="flex flex-col gap-1">
-                <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Đính kèm tệp">
-                  <AttachIcon />
-                </button>
-                <button onClick={() => setIsPromptLibraryOpen(true)} className="p-2.5 text-slate-400 hover:text-yellow-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Mẫu câu hỏi">
-                  <LightBulbIcon />
-                </button>
-              </div>
+          <div className="pointer-events-auto w-full max-w-4xl relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-2xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
+              
+              <div className="relative flex items-end gap-2 bg-slate-900/90 backdrop-blur-xl p-2 rounded-2xl border border-slate-700/50 shadow-2xl">
+                
+                {/* Tools - Left */}
+                <div className="flex gap-1 pb-1 pl-1">
+                    <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-xl transition-colors" title="Đính kèm">
+                        <AttachIcon />
+                    </button>
+                    <button onClick={() => setIsPromptLibraryOpen(true)} className="p-2.5 text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-xl transition-colors" title="Thư viện mẫu">
+                        <LightBulbIcon />
+                    </button>
+                    <button onClick={() => setIsHtmlModalOpen(true)} className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors hidden md:block" title="Phân tích HTML">
+                        <CodeBracketIcon />
+                    </button>
+                    <button onClick={() => setIsFakerModalOpen(true)} className="p-2.5 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-xl transition-colors hidden md:block" title="Dữ liệu giả">
+                        <DiceIcon />
+                    </button>
+                </div>
 
-              <div className="flex flex-col gap-1">
-                <button onClick={() => setIsHtmlModalOpen(true)} className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Phân tích HTML">
-                  <CodeBracketIcon />
-                </button>
-                <button onClick={() => setIsFakerModalOpen(true)} className="p-2.5 text-slate-400 hover:text-purple-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0" title="Tạo dữ liệu giả (Random)">
-                  <DiceIcon />
-                </button>
-              </div>
+                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".txt,.json,.gscript,.js,.ts,.html,.htm" />
 
-              <div className="flex flex-col gap-1">
-                 <button onClick={handleVoiceInput} className={`p-2.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0 ${isListening ? 'text-red-500 bg-slate-700' : ''}`} title="Nhập bằng giọng nói">
-                  <MicrophoneIcon isListening={isListening} />
-                </button>
-              </div>
+                <textarea
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder={isListening ? "Đang lắng nghe..." : "Gõ '/' để dùng lệnh, hoặc nhập câu hỏi..."}
+                    className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none py-3.5 px-2 max-h-40 resize-none custom-scrollbar min-h-[52px]"
+                    rows={1}
+                />
 
-              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".txt,.json,.gscript,.js,.ts,.html,.htm" />
-
-              <textarea
-                value={inputValue}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder={isListening ? "Đang lắng nghe..." : "Gõ '/' để chọn lệnh, hoặc hỏi bất kỳ điều gì..."}
-                className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none py-3 max-h-32 resize-none custom-scrollbar min-h-[44px]"
-                rows={1}
-              />
-
-              <button
-                onClick={handleSendMessage}
-                disabled={(!inputValue.trim() && !attachedFile) || isThinking}
-                className="p-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg shadow-lg transition-all active:scale-95 flex-shrink-0 h-fit self-end"
-              >
-                <SendIcon />
-              </button>
+                {/* Actions - Right */}
+                <div className="flex gap-2 pb-1 pr-1">
+                    <button onClick={handleVoiceInput} className={`p-2.5 rounded-xl transition-all ${isListening ? 'text-red-500 bg-red-500/10 animate-pulse' : 'text-slate-400 hover:text-red-400 hover:bg-slate-800'}`} title="Giọng nói">
+                        <MicrophoneIcon isListening={isListening} />
+                    </button>
+                    <button
+                        onClick={handleSendMessage}
+                        disabled={(!inputValue.trim() && !attachedFile) || isThinking}
+                        className="p-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-slate-700 disabled:to-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
+                    >
+                        <SendIcon />
+                    </button>
+                </div>
             </div>
-             <div className="text-center mt-2">
-                <p className="text-[10px] text-slate-500">GPM Automate Assistant có thể đưa ra thông tin không chính xác.</p>
+             <div className="text-center mt-3 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                <p className="text-[10px] text-slate-500 font-mono tracking-wide">AI có thể mắc lỗi. Hãy kiểm tra lại thông tin quan trọng.</p>
               </div>
           </div>
-        </footer>
+        </div>
       </div>
     </div>
   );

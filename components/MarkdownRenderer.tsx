@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 
 interface MarkdownRendererProps {
   content: string;
-  onRegenerateMermaid?: (code: string) => void;
+  onFixContent?: (content: string) => void;
 }
 
 // Initialize mermaid
@@ -65,6 +65,12 @@ const DownloadIcon = () => (
 const ArrowPathIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-3.5 h-3.5 ${className || ''}`}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+  </svg>
+);
+
+const WarningIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-amber-500">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
   </svg>
 );
 
@@ -136,8 +142,6 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
     const svgElement = containerRef.current.querySelector('svg');
     if (!svgElement) return;
 
-    // Use viewBox to get true dimensions, falling back to getBoundingClientRect only if necessary
-    // This prevents distortion caused by CSS scaling (max-width/max-height)
     const viewBox = svgElement.getAttribute('viewBox');
     let width, height;
 
@@ -151,25 +155,18 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
         height = bbox.height;
     }
 
-    // High DPI Scale
     const scale = 3;
     const finalWidth = width * scale;
     const finalHeight = height * scale;
 
-    // Get SVG Source
     const serializer = new XMLSerializer();
     let source = serializer.serializeToString(svgElement);
 
-    // FIX: Inject explicit width/height matching the viewBox * scale into the SVG source
-    // This forces the Image object to load it at the correct aspect ratio and high resolution
     source = source.replace(/<svg([^>]*)>/, (match, attrs) => {
-        // Remove existing width/height attributes to avoid duplicates/conflicts
         let newAttrs = attrs.replace(/\s+width="[^"]*"/gi, '').replace(/\s+height="[^"]*"/gi, '');
-        // Add calculated dimensions
         return `<svg${newAttrs} width="${finalWidth}" height="${finalHeight}">`;
     });
 
-    // Add XML declaration if missing
     if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
       source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
     }
@@ -192,20 +189,16 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
         return;
       }
 
-      // Draw Dark Background
       ctx.fillStyle = '#1e293b'; 
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Draw SVG
       ctx.drawImage(img, 0, 0, finalWidth, finalHeight);
       
       try {
         const imgData = canvas.toDataURL('image/png');
         
-        // Generate PDF
-        // Add margins
         const margin = 20;
-        const pdfWidth = (finalWidth / scale) + (margin * 2); // Use visual points for PDF size
+        const pdfWidth = (finalWidth / scale) + (margin * 2); 
         const pdfHeight = (finalHeight / scale) + (margin * 2);
 
         const pdf = new jsPDF({
@@ -214,15 +207,12 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
           format: [pdfWidth, pdfHeight]
         });
         
-        // Add Image
-        // We draw the high-res image into the PDF bounds
         pdf.addImage(imgData, 'PNG', margin, margin, (finalWidth / scale), (finalHeight / scale));
         
         pdf.save(`GPM_Flowchart_${Date.now()}.pdf`);
         
       } catch (e) {
         console.error("PDF Export failed:", e);
-        // Fallback to SVG
         const downloadLink = document.createElement('a');
         downloadLink.href = url;
         downloadLink.download = `GPM_Flowchart_${Date.now()}.svg`;
@@ -277,6 +267,15 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
                 Quy trình xử lý
               </span>
               <div className="flex items-center gap-1">
+                {onRegenerate && (
+                  <button 
+                    onClick={() => onRegenerate(code)}
+                    className="text-slate-400 hover:text-indigo-400 transition-colors p-1.5 rounded hover:bg-slate-700 group"
+                    title="Tạo lại/Sửa sơ đồ (Fix)"
+                  >
+                    <ArrowPathIcon className="group-hover:animate-spin" />
+                  </button>
+                )}
                 <button
                   onClick={downloadAsPDF}
                   className="text-slate-400 hover:text-white transition-colors p-1.5 rounded hover:bg-slate-700"
@@ -294,23 +293,19 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
               </div>
           </div>
           
-          {/* Main Diagram Area with Height Limit */}
           <div 
             ref={containerRef}
             className="flex justify-center overflow-auto custom-scrollbar p-4 bg-slate-900/80 max-h-[350px]" 
             dangerouslySetInnerHTML={{ __html: svg }} 
           />
           
-          {/* Helper text if tall */}
           <div className="text-[10px] text-center text-slate-500 py-1 bg-slate-800/20">
              Nhấn biểu tượng phóng to ↗ để xem chi tiết hoặc tải file PDF
           </div>
       </div>
 
-      {/* Fullscreen Modal */}
       {isFullscreen && (
         <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-sm flex flex-col animate-in fade-in duration-200">
-           {/* Modal Header */}
            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900 shadow-md flex-shrink-0">
               <h3 className="text-lg font-bold text-white">Sơ đồ luồng chi tiết</h3>
               <div className="flex items-center gap-3">
@@ -329,7 +324,6 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
               </div>
            </div>
            
-           {/* Modal Content - Scrollable */}
            <div className="flex-1 overflow-auto p-8 flex items-start justify-center cursor-move custom-scrollbar">
               <div 
                 className="bg-slate-900 p-8 rounded-xl shadow-2xl border border-slate-800 min-w-[50%]"
@@ -352,7 +346,6 @@ const CopyableText: React.FC<{ text: string, className?: string }> = ({ text, cl
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    // Remove backticks if present for cleaner copy
     const cleanText = text.replace(/^`|`$/g, '');
     const success = await copyToClipboard(cleanText);
     if (success) {
@@ -378,8 +371,6 @@ const CopyableText: React.FC<{ text: string, className?: string }> = ({ text, cl
 
 // 3. TableBlock: Renders Markdown Tables
 const TableBlock: React.FC<{ rows: string[] }> = ({ rows }) => {
-  // Simple parser: assumes rows start/end with | and splits by |
-  // Row 0: Header, Row 1: Divider, Row 2+: Data
   if (rows.length < 2) return null;
 
   const parseRow = (row: string) => {
@@ -387,7 +378,6 @@ const TableBlock: React.FC<{ rows: string[] }> = ({ rows }) => {
   };
 
   const headers = parseRow(rows[0]);
-  // Detect "XPath" column index
   const xpathColIndex = headers.findIndex(h => h.toLowerCase().includes('xpath'));
   
   const dataRows = rows.slice(2).map(r => parseRow(r));
@@ -410,11 +400,9 @@ const TableBlock: React.FC<{ rows: string[] }> = ({ rows }) => {
               <tr key={rIdx} className="hover:bg-slate-800/30 transition-colors">
                 {row.map((cell, cIdx) => (
                   <td key={cIdx} className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap md:whitespace-normal">
-                    {/* If this is the XPath column, use CopyableText */}
                     {cIdx === xpathColIndex ? (
                       <CopyableText text={cell} />
                     ) : (
-                      // Render cell content (handle inline code if present)
                       cell.includes('`') ? <code className="text-xs bg-slate-800 px-1 py-0.5 rounded text-yellow-500 font-mono">{cell.replace(/`/g, '')}</code> : cell
                     )}
                   </td>
@@ -563,7 +551,6 @@ const TextRenderer: React.FC<{ content: string }> = ({ content }) => {
     lines.forEach((line, lineIdx) => {
         const trimmed = line.trim();
         
-        // --- TABLE MODE ---
         if (trimmed.startsWith('|') && trimmed.length > 1) {
             if (isListMode) { flushList(lineIdx); isListMode = false; }
             isTableMode = true;
@@ -574,17 +561,13 @@ const TextRenderer: React.FC<{ content: string }> = ({ content }) => {
             isTableMode = false;
         }
 
-        // --- LIST MODE ---
-        // Detect unordered list (- or *) or ordered list (1.)
         const isListItem = trimmed.startsWith('- ') || trimmed.startsWith('* ') || /^\d+\.\s/.test(trimmed);
         
         if (isListItem) {
             if (!isListMode) { isListMode = true; listBuffer = []; }
             
-            // Remove list marker for content rendering
             const cleanText = trimmed.replace(/^(-\s|\*\s|\d+\.\s)/, '');
             
-            // Process inline styles (bold, code)
             const boldParts = cleanText.split(/(\*\*.*?\*\*)/g);
             const renderedContent = (
             <span key={lineIdx}>
@@ -615,10 +598,8 @@ const TextRenderer: React.FC<{ content: string }> = ({ content }) => {
                 isListMode = false;
             }
             
-            // Skip empty lines if they are just formatting
             if (line === '' && tableBuffer.length === 0) return;
 
-            // --- REGULAR PARAGRAPH ---
             const boldParts = line.split(/(\*\*.*?\*\*)/g);
             renderedElements.push(
             <p key={`p-${lineIdx}`} className="min-h-[1.5em] mb-2">
@@ -642,7 +623,6 @@ const TextRenderer: React.FC<{ content: string }> = ({ content }) => {
             );
         }
     });
-    // Flush any remaining buffers
     flushTable(lines.length);
     flushList(lines.length);
 
@@ -651,9 +631,7 @@ const TextRenderer: React.FC<{ content: string }> = ({ content }) => {
 
 // --- Main Renderer ---
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onRegenerateMermaid }) => {
-  // 1. Tokenize Content
-  // We first split by Code Blocks to ensure we don't mess up code content
+export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onFixContent }) => {
   const codeSplit = content.split(/(```[\s\S]*?```)/g);
   
   const tokens: { type: string, content: string, language?: string, title?: string }[] = [];
@@ -665,10 +643,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onR
         const code = lines.slice(1, -1).join('\n');
         tokens.push({ type: 'code', content: code, language });
      } else {
-        // Now split by Collapsible Markers
-        // Syntax: ::: Title \n content \n :::
-        // Regex to capture the start marker: matches new line or start of string, then :::, then optional title, then end of line
-        // NOTE: We use a capturing group to include the delimiter in the result array
         const parts = part.split(/(?:^|\n)(:::.*)(?:\n|$)/g);
         
         parts.forEach(subPart => {
@@ -680,8 +654,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onR
                  tokens.push({ type: 'collapse-start', title: markerContent, content: '' });
               }
            } else {
-              // It's just text
-              if (subPart) { // Keep whitespace? The split usually leaves empty strings around delimiters.
+              if (subPart) { 
                   tokens.push({ type: 'text', content: subPart });
               }
            }
@@ -689,27 +662,17 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onR
      }
   });
   
-  // 2. Build Component Tree
-  // We use a stack to manage nesting (though typical usage is just 1 level deep)
-  
   const rootChildren: React.ReactNode[] = [];
-  
-  // Helper to get the current container to push elements to
-  // If stack is empty, push to rootChildren
-  // If stack has items, push to the children array of the top item
   const stack: { children: React.ReactNode[], title: string }[] = [];
   
   tokens.forEach((token, index) => {
      const key = `token-${index}`;
-     // Determine current container
      const currentContainer = stack.length > 0 ? stack[stack.length - 1].children : rootChildren;
      
      if (token.type === 'collapse-start') {
-         // Push new section to stack
          const newSection = { children: [], title: token.title || 'Chi tiết' };
          stack.push(newSection);
      } else if (token.type === 'collapse-end') {
-         // Pop from stack and render the CollapsibleSection into the *parent* container
          if (stack.length > 0) {
              const finishedSection = stack.pop()!;
              const parentContainer = stack.length > 0 ? stack[stack.length - 1].children : rootChildren;
@@ -725,7 +688,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onR
                 <MermaidBlock 
                     key={key} 
                     code={token.content} 
-                    onRegenerate={onRegenerateMermaid}
+                    onRegenerate={onFixContent}
                 />
              );
          } else {
@@ -736,7 +699,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onR
      }
   });
 
-  // Handle unclosed sections gracefully
   while (stack.length > 0) {
       const finishedSection = stack.pop()!;
       const parentContainer = stack.length > 0 ? stack[stack.length - 1].children : rootChildren;
@@ -747,8 +709,27 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onR
       );
   }
 
+  // Relaxed detection: if we see ':::' in a text token, it's likely a malformed collapsible marker
+  // that regex failed to parse (e.g. missing newline)
+  const hasMalformedCollapsible = tokens.some(t => t.type === 'text' && t.content.includes(':::'));
+
   return (
     <div className="space-y-2 text-sm md:text-base leading-relaxed break-words">
+      {hasMalformedCollapsible && onFixContent && (
+        <div className="flex items-center justify-between p-2 mb-3 bg-amber-900/20 border border-amber-800/50 rounded-lg animate-in fade-in">
+            <div className="flex items-center gap-2 text-xs text-amber-200">
+                <WarningIcon />
+                <span>Phát hiện lỗi định dạng hướng dẫn.</span>
+            </div>
+            <button
+                onClick={() => onFixContent(content)}
+                className="flex items-center gap-1 px-3 py-1 bg-amber-700 hover:bg-amber-600 text-white text-xs rounded transition-colors shadow-sm"
+            >
+                <ArrowPathIcon />
+                <span className="font-bold">Fix</span>
+            </button>
+        </div>
+      )}
       {rootChildren}
     </div>
   );
