@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Content, Part } from "@google/genai";
 import { GPM_SYSTEM_INSTRUCTION } from "../constants";
 import { Message, Role } from "../types";
@@ -26,8 +25,15 @@ export const streamChatResponse = async (
   
   // If a file is uploaded, append its content as context to the message
   if (fileContent) {
+    // Truncate file content to approx 3MB characters (~750k tokens) to prevent 400 invalid argument error
+    const MAX_CHARS = 3000000;
+    let contentToUse = fileContent;
+    if (fileContent.length > MAX_CHARS) {
+         contentToUse = fileContent.substring(0, MAX_CHARS) + "\n...[TRUNCATED_DUE_TO_SIZE_LIMIT]...";
+    }
+
     parts.push({ 
-      text: `\n\n[CONTEXT FROM UPLOADED FILE]:\n${fileContent}\n\nNHIỆM VỤ: Nếu nội dung trên là HTML, hãy phân tích và tạo bảng XPath chuẩn cho các input, button, link theo quy tắc hệ thống. Nếu là Log/Script, hãy giải thích và sửa lỗi.` 
+      text: `\n\n[CONTEXT FROM UPLOADED FILE]:\n${contentToUse}\n\nNHIỆM VỤ: Nếu nội dung trên là HTML, hãy phân tích và tạo bảng XPath chuẩn cho các input, button, link theo quy tắc hệ thống. Nếu là Log/Script, hãy giải thích và sửa lỗi.` 
     });
   }
 

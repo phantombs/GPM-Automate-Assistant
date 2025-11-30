@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { streamChatResponse } from './services/geminiService';
 import { Message, Role, ChatSession } from './types';
@@ -442,7 +440,9 @@ export default function App() {
       ];
       updateCurrentSessionMessages(messagesWithBotPlaceholder);
 
-      const historyContext = updatedMessages.slice(-10);
+      // Fix: Use 'messages' (past history) instead of 'updatedMessages' (which includes current userMsg).
+      // This prevents the current message from being duplicated in the history sent to Gemini.
+      const historyContext = messages.slice(-10); 
       const stream = await streamChatResponse(historyContext, text, file?.content);
 
       let fullResponse = '';
@@ -459,12 +459,13 @@ export default function App() {
         }));
       }
     } catch (error) {
+       console.error(error);
        setSessions(prev => prev.map(s => {
           if (s.id === currentSessionId) {
              const newMsgs = [...s.messages, { 
                 id: Date.now().toString(), 
                 role: Role.MODEL, 
-                text: "Tôi gặp lỗi khi kết nối với máy chủ. Vui lòng kiểm tra API Key hoặc mạng.",
+                text: "Tôi gặp lỗi khi kết nối hoặc nội dung quá dài (Token Limit). Vui lòng thử lại với nội dung ngắn hơn.",
                 timestamp: new Date(),
                 isError: true
              }];
@@ -541,12 +542,13 @@ export default function App() {
             }));
         }
     } catch (error) {
+        console.error(error);
         setSessions(prev => prev.map(s => {
             if (s.id === currentSessionId) {
                 const newMsgs = [...s.messages, { 
                     id: Date.now().toString(), 
                     role: Role.MODEL, 
-                    text: "Lỗi khi tạo lại câu trả lời.", 
+                    text: "Lỗi khi tạo lại câu trả lời hoặc vượt quá giới hạn token.", 
                     timestamp: new Date(),
                     isError: true
                 }];
