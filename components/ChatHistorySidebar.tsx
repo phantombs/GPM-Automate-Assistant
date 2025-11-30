@@ -114,7 +114,7 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
       {/* Overlay for mobile */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 md:hidden"
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-20 md:hidden animate-in fade-in"
           onClick={onClose}
         />
       )}
@@ -122,16 +122,19 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
       {/* Sidebar Container */}
       <div className={`
         fixed md:static inset-y-0 left-0 z-30
-        w-80 bg-slate-950/90 border-r border-slate-800/50 backdrop-blur-xl
+        w-80 glass-strong h-full
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         flex flex-col shadow-2xl
       `}>
         {/* Header */}
-        <div className="p-5 border-b border-slate-800/50 flex items-center justify-between bg-slate-900/50">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">History</h2>
+        <div className="p-5 border-b border-white/5 flex items-center justify-between bg-white/5 backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-3 w-3">
+                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                 <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]"></span>
+              </div>
+              <h2 className="text-sm font-bold text-white tracking-widest font-mono">NEURAL LOGS</h2>
             </div>
             <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white transition-colors">
                 <CloseIcon />
@@ -145,19 +148,19 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
               onCreateSession();
               if (window.innerWidth < 768) onClose();
             }}
-            className="group w-full flex items-center gap-3 justify-center bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-4 py-3.5 rounded-xl font-medium transition-all shadow-lg shadow-indigo-900/30 active:scale-[0.98] border border-indigo-500/50"
+            className="group w-full flex items-center gap-3 justify-center bg-gradient-to-r from-indigo-600/30 to-cyan-600/30 hover:from-indigo-500/50 hover:to-cyan-500/50 active:scale-[0.98] text-indigo-100 px-4 py-3 rounded-xl font-medium transition-all border border-indigo-500/30 hover:border-cyan-400/50 shadow-lg shadow-indigo-900/10 hover:shadow-cyan-500/20"
           >
             <PlusIcon />
-            <span className="text-sm font-semibold tracking-wide">Cuộc hội thoại mới</span>
+            <span className="text-sm font-semibold tracking-wide">NEW SESSION</span>
           </button>
         </div>
 
         {/* Session List */}
         <div className="flex-1 overflow-y-auto px-3 py-2 custom-scrollbar space-y-1">
           {sessions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-slate-500 space-y-2 opacity-60">
+            <div className="flex flex-col items-center justify-center h-40 text-slate-600 space-y-2 opacity-50">
               <ChatBubbleIcon />
-              <p className="text-xs text-center">Chưa có lịch sử chat.</p>
+              <p className="text-xs text-center font-mono">No active logs...</p>
             </div>
           ) : (
             sessions.map((session) => (
@@ -170,10 +173,10 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
                     }
                 }}
                 className={`
-                  group flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 text-sm relative border
+                  group flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer transition-all duration-300 text-sm relative border
                   ${currentSessionId === session.id 
-                    ? 'bg-slate-800/60 border-slate-700 text-indigo-300 font-medium shadow-sm' 
-                    : 'text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-slate-200'}
+                    ? 'bg-gradient-to-r from-white/10 to-white/5 border-l-2 border-l-cyan-400 border-y-transparent border-r-transparent text-white font-medium shadow-md backdrop-blur-sm' 
+                    : 'text-slate-400 border-transparent hover:bg-white/5 hover:text-slate-200'}
                 `}
               >
                 {/* Editing Mode */}
@@ -186,41 +189,41 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
                             onChange={(e) => setEditTitle(e.target.value)}
                             onKeyDown={(e) => handleKeyDown(e, session.id)}
                             onClick={(e) => e.stopPropagation()}
-                            className="flex-1 bg-slate-900 text-slate-200 px-2 py-1.5 rounded-lg text-xs border border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="flex-1 bg-slate-950 text-slate-200 px-2 py-1.5 rounded border border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500 text-xs font-mono"
                         />
-                        <button onClick={(e) => { e.stopPropagation(); saveEditing(session.id); }} className="p-1.5 hover:bg-indigo-500/20 text-indigo-400 rounded-md transition-colors"><CheckIcon /></button>
-                        <button onClick={(e) => { e.stopPropagation(); cancelEditing(); }} className="p-1.5 hover:bg-red-500/20 text-red-400 rounded-md transition-colors"><CancelIcon /></button>
+                        <button onClick={(e) => { e.stopPropagation(); saveEditing(session.id); }} className="p-1.5 hover:bg-green-500/20 text-green-400 rounded transition-colors"><CheckIcon /></button>
+                        <button onClick={(e) => { e.stopPropagation(); cancelEditing(); }} className="p-1.5 hover:bg-red-500/20 text-red-400 rounded transition-colors"><CancelIcon /></button>
                     </div>
                 ) : (
                     <>
-                        <div className={`flex-shrink-0 transition-colors ${currentSessionId === session.id ? 'text-indigo-400' : 'text-slate-600 group-hover:text-slate-500'}`}>
+                        <div className={`flex-shrink-0 transition-colors ${currentSessionId === session.id ? 'text-cyan-400 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]' : 'text-slate-600 group-hover:text-slate-500'}`}>
                              {session.isPinned ? <PinIcon filled={true} /> : <ChatBubbleIcon />}
                         </div>
                         
-                        <div className="flex-1 truncate relative">
-                           {session.title || "Cuộc trò chuyện mới"}
+                        <div className="flex-1 truncate relative pr-2">
+                           {session.title || "Untitled Session"}
                         </div>
 
                         {/* Action Buttons (Visible on Hover or Active) */}
-                        <div className={`flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-200 absolute right-2 bg-slate-900/90 shadow-sm rounded-lg backdrop-blur-sm border border-slate-800 ${currentSessionId === session.id ? '' : 'translate-x-2 group-hover:translate-x-0'}`}>
+                        <div className={`flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-200 absolute right-2 bg-slate-900 rounded-md border border-slate-700/50 shadow-xl z-10 ${currentSessionId === session.id ? '' : 'translate-x-2 group-hover:translate-x-0'}`}>
                             <button
                                 onClick={(e) => onTogglePinSession(session.id, e)}
-                                className="p-1.5 rounded-md text-slate-500 hover:text-yellow-400 hover:bg-slate-800"
-                                title={session.isPinned ? "Bỏ ghim" : "Ghim"}
+                                className="p-1.5 rounded-sm text-slate-500 hover:text-yellow-400 hover:bg-slate-800"
+                                title={session.isPinned ? "Unpin" : "Pin"}
                             >
                                 <PinIcon filled={!!session.isPinned} />
                             </button>
                             <button
                                 onClick={(e) => startEditing(session.id, session.title, e)}
-                                className="p-1.5 rounded-md text-slate-500 hover:text-blue-400 hover:bg-slate-800"
-                                title="Đổi tên"
+                                className="p-1.5 rounded-sm text-slate-500 hover:text-cyan-400 hover:bg-slate-800"
+                                title="Rename"
                             >
                                 <PencilIcon />
                             </button>
                             <button
                                 onClick={(e) => onDeleteSession(session.id, e)}
-                                className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-slate-800"
-                                title="Xóa"
+                                className="p-1.5 rounded-sm text-slate-500 hover:text-red-400 hover:bg-slate-800"
+                                title="Delete"
                             >
                                 <TrashIcon />
                             </button>
@@ -233,8 +236,8 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
         </div>
         
         {/* Footer info */}
-        <div className="p-4 border-t border-slate-800/50 text-[10px] text-slate-600 text-center bg-slate-900/30 backdrop-blur-sm">
-            <span className="opacity-50">GPM Automate Assistant AI</span>
+        <div className="p-4 border-t border-white/5 text-[10px] text-slate-600 text-center font-mono uppercase tracking-widest bg-white/5">
+            System Online • v3.0
         </div>
       </div>
     </>

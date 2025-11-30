@@ -13,20 +13,47 @@
             colors: {
               slate: {
                 850: '#151e2e',
+                900: '#0f172a',
                 950: '#020617',
+              },
+              primary: {
+                500: '#6366f1',
+                600: '#4f46e5',
+              },
+              cyber: {
+                accent: '#00f0ff',
+                purple: '#bc13fe',
+                dark: '#050511'
               }
             },
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
             },
             animation: {
-              'fade-in-up': 'fadeInUp 0.5s ease-out',
-              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'float': 'float 6s ease-in-out infinite',
+              'glow': 'glow 3s ease-in-out infinite alternate',
+              'spin-slow': 'spin 12s linear infinite',
+              'grid-move': 'gridMove 20s linear infinite',
             },
             keyframes: {
               fadeInUp: {
-                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
                 '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              glow: {
+                '0%': { boxShadow: '0 0 5px rgba(99, 102, 241, 0.2)' },
+                '100%': { boxShadow: '0 0 25px rgba(99, 102, 241, 0.5), 0 0 10px rgba(188, 19, 254, 0.3)' }
+              },
+              gridMove: {
+                '0%': { backgroundPosition: '0 0' },
+                '100%': { backgroundPosition: '50px 50px' }
               }
             }
           }
@@ -37,23 +64,60 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #020617; /* Slate 950 */
+        background-color: #020617;
+        color: #e2e8f0;
+      }
+
+      /* Cyber Grid Background */
+      .bg-cyber-grid {
+        background-color: #050511;
         background-image: 
-          radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.1) 0px, transparent 50%),
-          radial-gradient(at 100% 0%, rgba(147, 51, 234, 0.05) 0px, transparent 50%);
+          linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+          radial-gradient(circle at 50% 0%, rgba(188, 19, 254, 0.15) 0%, transparent 60%);
+        background-size: 40px 40px, 40px 40px, 100% 100%;
         background-attachment: fixed;
       }
-      code, pre {
-        font-family: 'JetBrains Mono', monospace;
+      
+      /* Vignette & Noise */
+      .bg-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: radial-gradient(circle at center, transparent 0%, #020617 120%);
+        pointer-events: none;
+        z-index: -1;
       }
-      /* Custom scrollbar for chat area */
-      .scrollbar-hide::-webkit-scrollbar {
-          display: none;
+      
+      /* Glassmorphism Utilities */
+      .glass {
+        background: rgba(15, 23, 42, 0.4);
+        backdrop-filter: blur(12px) saturate(150%);
+        -webkit-backdrop-filter: blur(12px) saturate(150%);
+        border: 1px solid rgba(255, 255, 255, 0.08);
       }
-      .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
+      
+      .glass-panel {
+        background: rgba(30, 41, 59, 0.4);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
       }
+      
+      .glass-strong {
+        background: rgba(5, 5, 17, 0.7);
+        backdrop-filter: blur(24px);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .glass-dock {
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+      }
+
+      /* Scrollbar */
       .custom-scrollbar::-webkit-scrollbar {
         width: 5px;
         height: 5px;
@@ -62,11 +126,15 @@
         background: transparent;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #334155;
+        background: rgba(99, 102, 241, 0.2);
         border-radius: 10px;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: #475569;
+        background: rgba(99, 102, 241, 0.6);
+      }
+      
+      code {
+        font-family: 'JetBrains Mono', monospace;
       }
     </style>
   <script type="importmap">
@@ -83,7 +151,8 @@
 }
 </script>
 </head>
-  <body class="text-slate-100 h-screen overflow-hidden selection:bg-indigo-500/30 selection:text-indigo-200">
-    <div id="root" class="h-full w-full"></div>
+  <body class="h-screen overflow-hidden selection:bg-cyan-500/30 selection:text-cyan-100 bg-cyber-grid">
+    <div class="bg-overlay"></div>
+    <div id="root" class="h-full w-full flex flex-col relative z-10"></div>
   </body>
 </html>
