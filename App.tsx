@@ -95,6 +95,7 @@ const NODE_COMMANDS = [
   { label: '/type', desc: 'Nhập văn bản (Type Text)', value: 'Cách dùng Node Type Text' },
   { label: '/open', desc: 'Mở trình duyệt (Open Browser)', value: 'Cấu hình Node Open Browser' },
   { label: '/script', desc: 'Chạy Javascript', value: 'Hướng dẫn Node Javascript Execute' },
+  { label: '/api', desc: 'GPM Login API (V3)', value: 'Hướng dẫn sử dụng API để Start/Stop Profile' },
   { label: '/readexcel', desc: 'Đọc file Excel', value: 'Cách đọc dữ liệu từ Excel (Read Excel File)' },
   { label: '/wait', desc: 'Chờ đợi (Wait/Delay)', value: 'Sử dụng Node Wait/Delay' },
   { label: '/faker', desc: 'Tạo dữ liệu giả (Random)', value: '/faker' },
@@ -136,12 +137,12 @@ const WelcomeHero = ({ onAction }: { onAction: (text: string, isTool?: string) =
             prompt: "Kịch bản của tôi đang bị lỗi dừng đột ngột, hãy hướng dẫn tôi cách debug (tìm lỗi) chi tiết."
         },
         {
-            icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>,
-            title: "Mẫu Login",
-            desc: "Kịch bản Login & đọc Excel",
+            icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" /></svg>,
+            title: "GPM API V3",
+            desc: "Code Python/JS điều khiển Profile",
             color: "from-emerald-500 to-teal-600",
              shadow: "shadow-emerald-500/20",
-            prompt: "Hãy hướng dẫn tôi viết kịch bản đăng nhập vào một trang web và đọc dữ liệu từ file Excel từng dòng."
+            prompt: "Hướng dẫn tôi sử dụng API của GPM Login để mở một profile bằng code Python."
         }
     ];
 
@@ -171,7 +172,7 @@ const WelcomeHero = ({ onAction }: { onAction: (text: string, isTool?: string) =
                 GPM <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 animate-glow">Automate AI</span>
             </h1>
             <p className="text-slate-400 text-center mb-12 max-w-xl text-lg font-light">
-                Trợ lý thông minh cho GPM. <br className="md:hidden"/>Tối ưu hóa kịch bản, xử lý dữ liệu và sửa lỗi.
+                Trợ lý thông minh cho GPM. <br className="md:hidden"/>Tối ưu hóa kịch bản, xử lý API và sửa lỗi.
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
@@ -590,7 +591,9 @@ YÊU CẦU SỬA LỖI BẮT BUỘC:
 3. **CÚ PHÁP ID & KẾT NỐI**:
    - ID Node TUYỆT ĐỐI KHÔNG chứa khoảng trắng. Nếu thấy (VD: \`Gr NodeA\`), hãy xóa phần thừa hoặc nối lại (\`NodeA\`).
    - Kiểm tra các mũi tên \`-->\`, đảm bảo phía sau là ID hợp lệ, không có ký tự rác.
-   - Nội dung hiển thị PHẢI đặt trong ngoặc kép \`"\`.
+4. **LỖI KÝ TỰ ĐẶC BIỆT (Parse Error)**:
+   - Nếu nội dung hiển thị (trong dấu []) chứa ký tự đặc biệt như \`()\`, \`:\`, \`[]\`, \`.\` (ví dụ: \`NodeA[Data (Body): json]\`), BẮT BUỘC phải bọc trong ngoặc kép.
+   - **Cách sửa:** \`NodeA["Data (Body): json"]\`.
 
 TRẢ VỀ:
 - Chỉ trả về block code Mermaid đã sửa.

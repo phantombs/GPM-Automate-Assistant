@@ -1,4 +1,5 @@
 
+
 import React, { useMemo } from 'react';
 import { Message, Role } from '../types';
 
@@ -27,6 +28,16 @@ const STATIC_CATEGORIES = [
       "Giải thích các node cơ bản trong GPM Automate",
       "Cách sử dụng biến (Variable) trong kịch bản",
       "Sửa lỗi 'Element not found' như thế nào?"
+    ]
+  },
+  {
+    title: "GPM Login API (Quản lý Profile)",
+    prompts: [
+      "Cách mở Profile ID ... bằng code Python",
+      "Sử dụng API để tạo Profile mới",
+      "Endpoint để cập nhật Proxy cho Profile",
+      "Làm sao để lấy danh sách Profile đang chạy?",
+      "Code Node.js để Start Profile qua Local API"
     ]
   },
   {
@@ -78,12 +89,12 @@ const CONTEXT_RULES = [
         ]
     },
     {
-        keywords: ['proxy', 'ip', 'mạng', 'http', 'request', 'api'],
+        keywords: ['proxy', 'ip', 'mạng', 'http', 'request', 'api', 'profile', 'start', 'open'],
         prompts: [
-            "Cách sử dụng HTTP Request để gọi API",
+            "Hướng dẫn dùng API Start Profile bằng Python",
+            "Cách đổi Proxy cho Profile qua API",
             "Kiểm tra IP hiện tại bằng script",
-            "Cấu hình xoay Proxy sau mỗi lần chạy",
-            "Cách lấy Cookie từ trình duyệt"
+            "Cấu hình xoay Proxy sau mỗi lần chạy"
         ]
     },
     {
