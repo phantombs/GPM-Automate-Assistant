@@ -1,39 +1,80 @@
+
 import { GoogleGenAI, Content, Part } from "@google/genai";
 import { GPM_SYSTEM_INSTRUCTION } from "../constants";
 import { Message, Role } from "../types";
 
 // Initialize Gemini Client
-// CRITICAL: process.env.API_KEY is assumed to be available in the environment.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+
+/**
+ * Giới hạn kích thước văn bản để tránh lỗi Token Limit
+ */
+const MAX_CHARS_PER_PART = 1500000; 
+
+const truncateContent = (content: string) => {
+  if (content.length > MAX_CHARS_PER_PART) {
+    return content.substring(0, MAX_CHARS_PER_PART) + "\n...[Dữ liệu quá lớn, đã lược bớt]...";
+  }
+  return content;
+};
 
 export const streamChatResponse = async (
   history: Message[],
   newMessage: string,
-  fileContent?: string
+  fileContent?: string,
+  imageData?: { data: string; mimeType: string }
 ): Promise<AsyncIterable<string>> => {
   
-  const model = "gemini-2.5-flash";
+  const model = "gemini-3-flash-preview";
 
-  // Convert internal Message type to Gemini Content type
-  const historyContent: Content[] = history.map((msg) => ({
-    role: msg.role === Role.USER ? "user" : "model",
-    parts: [{ text: msg.text }] as Part[],
-  }));
+  // Chuyển đổi lịch sử tin nhắn bao gồm cả Text, File và Hình ảnh
+  const historyContent: Content[] = history
+    .filter(msg => (msg.text && msg.text.trim() !== '') || msg.attachedFile || msg.attachedImage)
+    .map((msg) => {
+      const parts: Part[] = [];
+      
+      if (msg.text) {
+        parts.push({ text: msg.text });
+      }
+      
+      if (msg.attachedFile?.content) {
+        parts.push({ 
+          text: `\n\n[DỮ LIỆU ĐÍNH KÈM TRONG QUÁ KHỨ (${msg.attachedFile.name})]:\n${truncateContent(msg.attachedFile.content)}` 
+        });
+      }
 
-  // Construct the current user message
-  const parts: Part[] = [{ text: newMessage }];
+      if (msg.attachedImage) {
+        parts.push({
+          inlineData: {
+            data: msg.attachedImage.data,
+            mimeType: msg.attachedImage.mimeType
+          }
+        });
+      }
+
+      return {
+        role: msg.role === Role.USER ? "user" : "model",
+        parts,
+      };
+    });
+
+  // Tạo phần nội dung tin nhắn hiện tại
+  const currentParts: Part[] = [{ text: newMessage }];
   
-  // If a file is uploaded, append its content as context to the message
+  // Xử lý File đính kèm hiện tại
   if (fileContent) {
-    // Truncate file content to approx 3MB characters (~750k tokens) to prevent 400 invalid argument error
-    const MAX_CHARS = 3000000;
-    let contentToUse = fileContent;
-    if (fileContent.length > MAX_CHARS) {
-         contentToUse = fileContent.substring(0, MAX_CHARS) + "\n...[TRUNCATED_DUE_TO_SIZE_LIMIT]...";
-    }
+    currentParts.push({ 
+      text: `\n\n[DỮ LIỆU ĐÍNH KÈM HIỆN TẠI]:\n${truncateContent(fileContent)}\n\nNHIỆM VỤ: Phân tích nội dung trên và hỗ trợ người dùng theo các quy tắc GPM Automate.` 
+    });
+  }
 
-    parts.push({ 
-      text: `\n\n[CONTEXT FROM UPLOADED FILE]:\n${contentToUse}\n\nNHIỆM VỤ: Nếu nội dung trên là HTML, hãy phân tích và tạo bảng XPath chuẩn cho các input, button, link theo quy tắc hệ thống. Nếu là Log/Script, hãy giải thích và sửa lỗi.` 
+  // Xử lý Hình ảnh hiện tại (Multimodal)
+  if (imageData) {
+    currentParts.push({
+      inlineData: {
+        data: imageData.data,
+        mimeType: imageData.mimeType
+      }
     });
   }
 
@@ -41,8 +82,7 @@ export const streamChatResponse = async (
     model: model,
     config: {
       systemInstruction: GPM_SYSTEM_INSTRUCTION,
-      temperature: 0.4, // Keep it relatively precise for technical docs
-      // Enable Google Search Grounding to allow the model to look up docs.gpmautomate.com
+      temperature: 0.5,
       tools: [{ googleSearch: {} }],
     },
     history: historyContent,
@@ -50,10 +90,9 @@ export const streamChatResponse = async (
 
   try {
     const result = await chat.sendMessageStream({
-      message: parts
+      message: currentParts
     });
 
-    // Return an async iterable that yields text chunks
     return (async function* () {
       for await (const chunk of result) {
         const text = chunk.text;
@@ -63,8 +102,12 @@ export const streamChatResponse = async (
       }
     })();
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw new Error("Không thể kết nối với Trợ lý GPM. Vui lòng kiểm tra API Key hoặc mạng.");
+    const errorMessage = error?.message || "";
+    if (errorMessage.includes("API_KEY_INVALID")) {
+        throw new Error("API Key không hợp lệ. Vui lòng kiểm tra lại cấu hình.");
+    }
+    throw new Error(`Không thể kết nối với AI: ${error.message || "Lỗi không xác định"}`);
   }
 };

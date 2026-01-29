@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
 import { jsPDF } from 'jspdf';
@@ -120,7 +121,6 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
     const renderChart = async () => {
       try {
         const uniqueId = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-        // Clean up code to avoid parsing errors
         const cleanCode = code.replace(/\\"/g, '"');
         const { svg } = await mermaid.render(uniqueId, cleanCode);
         setSvg(svg);
@@ -136,98 +136,99 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
     }
   }, [code]);
 
-  const downloadAsPDF = () => {
+  const downloadAsPDF = async () => {
     if (!containerRef.current) return;
     
     const svgElement = containerRef.current.querySelector('svg');
     if (!svgElement) return;
 
-    const viewBox = svgElement.getAttribute('viewBox');
-    let width, height;
+    try {
+        // Clone for modifications
+        const clonedSvg = svgElement.cloneNode(true) as SVGElement;
+        
+        // Get dimensions from viewBox or client rect
+        const viewBox = clonedSvg.getAttribute('viewBox');
+        let width = 800;
+        let height = 600;
 
-    if (viewBox) {
-        const [x, y, w, h] = viewBox.split(' ').map(Number);
-        width = w;
-        height = h;
-    } else {
-        const bbox = svgElement.getBoundingClientRect();
-        width = bbox.width;
-        height = bbox.height;
+        if (viewBox) {
+            const parts = viewBox.split(/[ ,]+/).map(Number);
+            if (parts.length === 4) {
+                width = parts[2];
+                height = parts[3];
+            }
+        } else {
+            const bbox = svgElement.getBBox();
+            width = bbox.width;
+            height = bbox.height;
+        }
+
+        const scale = 2; // Increase resolution
+        const finalWidth = width * scale;
+        const finalHeight = height * scale;
+
+        // Ensure proper attributes for canvas rendering
+        clonedSvg.setAttribute('width', finalWidth.toString());
+        clonedSvg.setAttribute('height', finalHeight.toString());
+
+        // Serialize SVG with XML namespaces
+        const serializer = new XMLSerializer();
+        let svgString = serializer.serializeToString(clonedSvg);
+        
+        if (!svgString.includes('xmlns="http://www.w3.org/2000/svg"')) {
+            svgString = svgString.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = finalWidth;
+            canvas.height = finalHeight;
+            const ctx = canvas.getContext('2d');
+            
+            if (!ctx) throw new Error("Canvas context failed");
+
+            // Fill background
+            ctx.fillStyle = '#0f172a'; // Slate-900 like UI
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.drawImage(img, 0, 0, finalWidth, finalHeight);
+            
+            const imgData = canvas.toDataURL('image/png');
+            
+            // PDF Size Logic
+            const margin = 40;
+            const pdfWidth = width + (margin * 2);
+            const pdfHeight = height + (margin * 2);
+
+            const pdf = new jsPDF({
+                orientation: width > height ? 'l' : 'p',
+                unit: 'px',
+                format: [pdfWidth, pdfHeight]
+            });
+            
+            pdf.addImage(imgData, 'PNG', margin, margin, width, height);
+            pdf.save(`GPM_Scenario_${Date.now()}.pdf`);
+            
+            URL.revokeObjectURL(url);
+        };
+        img.onerror = (e) => {
+            console.error("Image load error", e);
+            // Fallback to SVG if canvas fails
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `GPM_Scenario_${Date.now()}.svg`;
+            a.click();
+        };
+        img.src = url;
+
+    } catch (e) {
+        console.error("PDF Export total failure", e);
+        alert("Không thể xuất PDF. Đang tải về định dạng SVG thay thế.");
     }
-
-    const scale = 3;
-    const finalWidth = width * scale;
-    const finalHeight = height * scale;
-
-    const serializer = new XMLSerializer();
-    let source = serializer.serializeToString(svgElement);
-
-    source = source.replace(/<svg([^>]*)>/, (match, attrs) => {
-        let newAttrs = attrs.replace(/\s+width="[^"]*"/gi, '').replace(/\s+height="[^"]*"/gi, '');
-        return `<svg${newAttrs} width="${finalWidth}" height="${finalHeight}">`;
-    });
-
-    if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
-      source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-    }
-    if (!source.match(/^<svg[^>]+"http\:\/\/www\.w3\.org\/1999\/xlink"/)) {
-      source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
-    }
-
-    const svgBlob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
-
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = finalWidth;
-      canvas.height = finalHeight;
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-
-      ctx.fillStyle = '#1e293b'; 
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      ctx.drawImage(img, 0, 0, finalWidth, finalHeight);
-      
-      try {
-        const imgData = canvas.toDataURL('image/png');
-        
-        const margin = 20;
-        const pdfWidth = (finalWidth / scale) + (margin * 2); 
-        const pdfHeight = (finalHeight / scale) + (margin * 2);
-
-        const pdf = new jsPDF({
-          orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
-          unit: 'px',
-          format: [pdfWidth, pdfHeight]
-        });
-        
-        pdf.addImage(imgData, 'PNG', margin, margin, (finalWidth / scale), (finalHeight / scale));
-        
-        pdf.save(`GPM_Flowchart_${Date.now()}.pdf`);
-        
-      } catch (e) {
-        console.error("PDF Export failed:", e);
-        const downloadLink = document.createElement('a');
-        downloadLink.href = url;
-        downloadLink.download = `GPM_Flowchart_${Date.now()}.svg`;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-      }
-      
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = () => {
-       console.error("Failed to load SVG image for PDF export");
-       URL.revokeObjectURL(url);
-    };
-    img.src = url;
   };
 
   if (error) {
@@ -310,7 +311,7 @@ const MermaidBlock: React.FC<{ code: string; onRegenerate?: (code: string) => vo
               <h3 className="text-lg font-bold text-white">Sơ đồ luồng chi tiết</h3>
               <div className="flex items-center gap-3">
                  <button
-                    onClick={() => { downloadAsPDF(); }}
+                    onClick={downloadAsPDF}
                     className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm transition-colors"
                   >
                     <DownloadIcon /> Tải PDF
@@ -709,8 +710,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, onF
       );
   }
 
-  // Relaxed detection: if we see ':::' in a text token, it's likely a malformed collapsible marker
-  // that regex failed to parse (e.g. missing newline)
   const hasMalformedCollapsible = tokens.some(t => t.type === 'text' && t.content.includes(':::'));
 
   return (

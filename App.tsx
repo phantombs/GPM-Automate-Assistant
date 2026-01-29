@@ -1,12 +1,14 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { streamChatResponse } from './services/geminiService';
 import { Message, Role, ChatSession } from './types';
-import { INITIAL_GREETING } from './constants';
+import { INITIAL_GREETING, GPM_OFFICIAL_DOCS } from './constants';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
 import { ChatHistorySidebar } from './components/ChatHistorySidebar';
 import { HtmlAnalysisModal } from './components/HtmlAnalysisModal';
 import { PromptLibraryModal } from './components/PromptLibraryModal';
 import { FakerGeneratorModal } from './components/FakerGeneratorModal';
+import { GpmDocsModal } from './components/GpmDocsModal';
 
 // --- Icons ---
 const SendIcon = () => (
@@ -90,6 +92,11 @@ const DiceIcon = () => (
 );
 
 // --- Constants & Configs ---
+const STORAGE_KEY = 'gpm_chat_sessions';
+const ACTIVE_SESSION_KEY = 'gpm_active_session_id';
+const INPUT_DRAFT_KEY = 'gpm_input_draft_';
+const AUTO_SAVE_INTERVAL = 5000; // 5 seconds
+
 const NODE_COMMANDS = [
   { label: '/click', desc: 'Click vào phần tử', value: 'Hướng dẫn sử dụng Node Click trong GPM' },
   { label: '/type', desc: 'Nhập văn bản (Type Text)', value: 'Cách dùng Node Type Text' },
@@ -205,6 +212,7 @@ export default function App() {
   const [inputValue, setInputValue] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [attachedFile, setAttachedFile] = useState<{name: string, content: string} | null>(null);
+  const [attachedImage, setAttachedImage] = useState<{data: string, mimeType: string, preview: string} | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
@@ -212,6 +220,7 @@ export default function App() {
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
   const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
   const [isFakerModalOpen, setIsFakerModalOpen] = useState(false);
+  const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
   
   const [isListening, setIsListening] = useState(false);
   
@@ -227,10 +236,63 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null); 
 
-  // --- Effects & Logic ---
+  // --- Persistence Logic ---
 
+  const saveToLocalStorage = (currentSessions: ChatSession[], activeId: string | null) => {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSessions));
+        if (activeId) {
+            localStorage.setItem(ACTIVE_SESSION_KEY, activeId);
+        }
+    } catch (e) {
+        console.error("Failed to save to localStorage", e);
+    }
+  };
+
+  const saveInputDraft = (sessionId: string | null, value: string) => {
+    if (!sessionId) return;
+    try {
+        localStorage.setItem(INPUT_DRAFT_KEY + sessionId, value);
+    } catch (e) {}
+  };
+
+  const loadInputDraft = (sessionId: string | null) => {
+    if (!sessionId) return '';
+    return localStorage.getItem(INPUT_DRAFT_KEY + sessionId) || '';
+  };
+
+  // --- Session Management ---
+
+  const createNewSession = () => {
+    const newSession: ChatSession = {
+      id: Date.now().toString(),
+      title: 'Đoạn chat mới',
+      messages: [{
+        id: 'init',
+        role: Role.MODEL,
+        text: INITIAL_GREETING,
+        timestamp: new Date()
+      }],
+      lastMessageAt: new Date(),
+      isPinned: false
+    };
+    
+    setSessions(prev => {
+        const updated = sortSessions([newSession, ...prev]);
+        saveToLocalStorage(updated, newSession.id);
+        return updated;
+    });
+    setCurrentSessionId(newSession.id);
+    setInputValue('');
+  };
+
+  // --- Effects & Initialization ---
+
+  // Load state on Mount
   useEffect(() => {
-    const savedSessions = localStorage.getItem('gpm_chat_sessions');
+    const savedSessions = localStorage.getItem(STORAGE_KEY);
+    const lastActiveId = localStorage.getItem(ACTIVE_SESSION_KEY);
+
     if (savedSessions) {
       try {
         const parsed = JSON.parse(savedSessions);
@@ -247,8 +309,14 @@ export default function App() {
         const sortedSessions = sortSessions(hydrated);
         setSessions(sortedSessions);
         
-        if (sortedSessions.length > 0) {
-          setCurrentSessionId(sortedSessions[0].id);
+        // Restore active session or default to first
+        const activeId = (lastActiveId && sortedSessions.find(s => s.id === lastActiveId)) 
+          ? lastActiveId 
+          : (sortedSessions.length > 0 ? sortedSessions[0].id : null);
+        
+        if (activeId) {
+          setCurrentSessionId(activeId);
+          setInputValue(loadInputDraft(activeId));
         } else {
           createNewSession();
         }
@@ -261,17 +329,33 @@ export default function App() {
     }
   }, []);
 
+  // Heartbeat Auto-save every 5 seconds
   useEffect(() => {
-    if (sessions.length > 0) {
-      localStorage.setItem('gpm_chat_sessions', JSON.stringify(sessions));
-    }
-  }, [sessions]);
+    const interval = setInterval(() => {
+        if (sessions.length > 0) {
+            saveToLocalStorage(sessions, currentSessionId);
+            saveInputDraft(currentSessionId, inputValue);
+        }
+    }, AUTO_SAVE_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [sessions, currentSessionId, inputValue]);
+
+  // Immediate save on critical session changes
+  useEffect(() => {
+    saveToLocalStorage(sessions, currentSessionId);
+  }, [sessions, currentSessionId]);
+
+  // Save draft on every keystroke
+  useEffect(() => {
+    saveInputDraft(currentSessionId, inputValue);
+  }, [inputValue, currentSessionId]);
 
   useEffect(() => {
     scrollToBottom();
   }, [sessions, currentSessionId, isThinking]);
 
-  // Speech Recognition
+  // Speech Recognition Setup
   useEffect(() => {
     if ('webkitSpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition;
@@ -286,58 +370,42 @@ export default function App() {
         setIsListening(false);
       };
 
-      recognitionRef.current.onerror = (event: any) => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
+      recognitionRef.current.onerror = () => setIsListening(false);
+      recognitionRef.current.onend = () => setIsListening(false);
     }
   }, []);
+
+  // --- Helpers ---
 
   const scrollToBottom = () => {
     if (editingMessageId) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const createNewSession = () => {
-    const newSession: ChatSession = {
-      id: Date.now().toString(),
-      title: 'Đoạn chat mới',
-      messages: [{
-        id: 'init',
-        role: Role.MODEL,
-        text: INITIAL_GREETING,
-        timestamp: new Date()
-      }],
-      lastMessageAt: new Date(),
-      isPinned: false
-    };
-    
-    setSessions(prev => sortSessions([newSession, ...prev]));
-    setCurrentSessionId(newSession.id);
+  const handleSelectSession = (id: string) => {
+    saveInputDraft(currentSessionId, inputValue);
+    setCurrentSessionId(id);
+    setInputValue(loadInputDraft(id));
   };
 
   const deleteSession = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    localStorage.removeItem(INPUT_DRAFT_KEY + id);
     let nextSessionId = currentSessionId;
-    if (currentSessionId === id) {
-       const remaining = sessions.filter(s => s.id !== id);
-       if (remaining.length > 0) {
-           nextSessionId = remaining[0].id;
-       } else {
-           nextSessionId = null;
-       }
-    }
-    const newSessions = sessions.filter(s => s.id !== id);
-    setSessions(newSessions);
-    localStorage.setItem('gpm_chat_sessions', JSON.stringify(newSessions));
+    const remaining = sessions.filter(s => s.id !== id);
     
-    if (!nextSessionId && newSessions.length === 0) {
+    if (currentSessionId === id) {
+       nextSessionId = remaining.length > 0 ? remaining[0].id : null;
+    }
+    
+    setSessions(remaining);
+    saveToLocalStorage(remaining, nextSessionId);
+    
+    if (!nextSessionId && remaining.length === 0) {
         createNewSession();
     } else if (nextSessionId !== currentSessionId) {
         setCurrentSessionId(nextSessionId);
+        setInputValue(loadInputDraft(nextSessionId));
     }
   };
 
@@ -345,12 +413,18 @@ export default function App() {
     e.stopPropagation();
     setSessions(prev => {
         const updated = prev.map(s => s.id === id ? { ...s, isPinned: !s.isPinned } : s);
-        return sortSessions(updated);
+        const sorted = sortSessions(updated);
+        saveToLocalStorage(sorted, currentSessionId);
+        return sorted;
     });
   };
 
   const renameSession = (id: string, newTitle: string) => {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle } : s));
+    setSessions(prev => {
+        const updated = prev.map(s => s.id === id ? { ...s, title: newTitle } : s);
+        saveToLocalStorage(updated, currentSessionId);
+        return updated;
+    });
   };
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
@@ -365,27 +439,46 @@ export default function App() {
             }
             return s;
         });
-        return sortSessions(updated);
+        const sorted = sortSessions(updated);
+        saveToLocalStorage(sorted, currentSessionId);
+        return sorted;
     });
   };
 
   const updateSessionTitle = (sessionId: string, firstUserMessage: string) => {
-    setSessions(prev => prev.map(s => {
-      if (s.id === sessionId && s.title === 'Đoạn chat mới') {
-        const title = firstUserMessage.slice(0, 30) + (firstUserMessage.length > 30 ? '...' : '');
-        return { ...s, title };
-      }
-      return s;
-    }));
+    setSessions(prev => {
+        const updated = prev.map(s => {
+            if (s.id === sessionId && (s.title === 'Đoạn chat mới' || !s.title)) {
+              const title = firstUserMessage.slice(0, 30) + (firstUserMessage.length > 30 ? '...' : '');
+              return { ...s, title };
+            }
+            return s;
+        });
+        saveToLocalStorage(updated, currentSessionId);
+        return updated;
+    });
   };
 
+  // --- Input Handlers ---
+
   const processFile = (file: File) => {
+    const isImage = file.type.startsWith('image/');
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      setAttachedFile({ name: file.name, content: content });
-    };
-    reader.readAsText(file);
+
+    if (isImage) {
+        reader.onload = (e) => {
+            const preview = e.target?.result as string;
+            const data = preview.split(',')[1];
+            setAttachedImage({ data, mimeType: file.type, preview });
+        };
+        reader.readAsDataURL(file);
+    } else {
+        reader.onload = (e) => {
+            const content = e.target?.result as string;
+            setAttachedFile({ name: file.name, content: content });
+        };
+        reader.readAsText(file);
+    }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -395,41 +488,42 @@ export default function App() {
     event.target.value = '';
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFile(e.dataTransfer.files[0]);
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            const blob = items[i].getAsFile();
+            if (blob) processFile(blob);
+        }
     }
   };
 
-  const sendChatMessage = async (text: string, file: {name: string, content: string} | null) => {
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation(); setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]);
+  };
+
+  const sendChatMessage = async (
+    text: string, 
+    file: {name: string, content: string} | null,
+    image: {data: string, mimeType: string, preview: string} | null
+  ) => {
     if (!currentSessionId) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: Role.USER,
       text: file ? `${text}\n\n[Tệp đính kèm: ${file.name}]` : text,
-      timestamp: new Date()
+      timestamp: new Date(),
+      attachedFile: file ? { name: file.name, content: file.content } : undefined,
+      attachedImage: image ? { data: image.data, mimeType: image.mimeType } : undefined
     };
 
     const updatedMessages = [...messages, userMsg];
     updateCurrentSessionMessages(updatedMessages);
-    updateSessionTitle(currentSessionId, text || file?.name || "Tin nhắn");
+    updateSessionTitle(currentSessionId, text || file?.name || "Hình ảnh");
     
     setIsThinking(true);
 
@@ -441,10 +535,8 @@ export default function App() {
       ];
       updateCurrentSessionMessages(messagesWithBotPlaceholder);
 
-      // Fix: Use 'messages' (past history) instead of 'updatedMessages' (which includes current userMsg).
-      // This prevents the current message from being duplicated in the history sent to Gemini.
       const historyContext = messages.slice(-10); 
-      const stream = await streamChatResponse(historyContext, text, file?.content);
+      const stream = await streamChatResponse(historyContext, text, file?.content, image ? { data: image.data, mimeType: image.mimeType } : undefined);
 
       let fullResponse = '';
       for await (const chunk of stream) {
@@ -459,18 +551,18 @@ export default function App() {
           return s;
         }));
       }
-    } catch (error) {
+    } catch (error: any) {
        console.error(error);
        setSessions(prev => prev.map(s => {
           if (s.id === currentSessionId) {
-             const newMsgs = [...s.messages, { 
-                id: Date.now().toString(), 
-                role: Role.MODEL, 
-                text: "Tôi gặp lỗi khi kết nối hoặc nội dung quá dài (Token Limit). Vui lòng thử lại với nội dung ngắn hơn.",
-                timestamp: new Date(),
-                isError: true
-             }];
-             return { ...s, messages: newMsgs };
+              const newMsgs = [...s.messages, { 
+                  id: Date.now().toString(), 
+                  role: Role.MODEL, 
+                  text: "Tôi gặp lỗi: " + (error?.message || "Lỗi Token Limit hoặc kết nối."),
+                  timestamp: new Date(),
+                  isError: true
+              }];
+              return { ...s, messages: newMsgs };
           }
           return s;
         }));
@@ -480,10 +572,12 @@ export default function App() {
   };
 
   const handleSendMessage = () => {
-    if ((!inputValue.trim() && !attachedFile) || isThinking) return;
-    sendChatMessage(inputValue, attachedFile);
+    if ((!inputValue.trim() && !attachedFile && !attachedImage) || isThinking) return;
+    sendChatMessage(inputValue, attachedFile, attachedImage);
     setInputValue('');
     setAttachedFile(null);
+    setAttachedImage(null);
+    saveInputDraft(currentSessionId, '');
   };
 
   const startEditingMessage = (msg: Message) => {
@@ -491,481 +585,213 @@ export default function App() {
     setEditedMessageContent(msg.text);
   };
 
-  const cancelEditingMessage = () => {
-    setEditingMessageId(null);
-    setEditedMessageContent('');
-  };
-
   const handleSaveEdit = async (messageId: string) => {
     if (!currentSessionId || !editedMessageContent.trim()) return;
-
     const session = sessions.find(s => s.id === currentSessionId);
     if (!session) return;
     const msgIndex = session.messages.findIndex(m => m.id === messageId);
     if (msgIndex === -1) return;
 
-    const updatedUserMsg: Message = {
-        ...session.messages[msgIndex],
-        text: editedMessageContent,
-        timestamp: new Date()
-    };
-    
-    const newHistory = [
+    const originalMsg = session.messages[msgIndex];
+    const updatedUserMsg: Message = { ...originalMsg, text: editedMessageContent, timestamp: new Date() };
+    const botMsgId = (Date.now() + 1).toString();
+    const newHistoryWithBot = [
         ...session.messages.slice(0, msgIndex),
-        updatedUserMsg
+        updatedUserMsg,
+        { id: botMsgId, role: Role.MODEL, text: '', timestamp: new Date() }
     ];
 
-    updateCurrentSessionMessages(newHistory);
+    updateCurrentSessionMessages(newHistoryWithBot);
     setEditingMessageId(null);
     setEditedMessageContent('');
     setIsThinking(true);
 
     try {
-        const botMsgId = (Date.now() + 1).toString();
-        const messagesWithBotPlaceholder = [
-            ...newHistory,
-            { id: botMsgId, role: Role.MODEL, text: '', timestamp: new Date() }
-        ];
-        updateCurrentSessionMessages(messagesWithBotPlaceholder);
-        const contextForStream = newHistory.slice(0, -1).slice(-10); 
-        const stream = await streamChatResponse(contextForStream, updatedUserMsg.text, null);
+        const stream = await streamChatResponse(
+            session.messages.slice(0, msgIndex).slice(-10), 
+            updatedUserMsg.text, 
+            originalMsg.attachedFile?.content,
+            originalMsg.attachedImage
+        );
         let fullResponse = '';
         for await (const chunk of stream) {
             fullResponse += chunk;
             setSessions(prev => prev.map(s => {
                 if (s.id === currentSessionId) {
-                    const newMsgs = s.messages.map(msg => 
-                        msg.id === botMsgId ? { ...msg, text: fullResponse } : msg
-                    );
+                    const newMsgs = s.messages.map(msg => msg.id === botMsgId ? { ...msg, text: fullResponse } : msg);
                     return { ...s, messages: newMsgs };
                 }
                 return s;
             }));
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error(error);
         setSessions(prev => prev.map(s => {
             if (s.id === currentSessionId) {
-                const newMsgs = [...s.messages, { 
-                    id: Date.now().toString(), 
-                    role: Role.MODEL, 
-                    text: "Lỗi khi tạo lại câu trả lời hoặc vượt quá giới hạn token.", 
-                    timestamp: new Date(),
-                    isError: true
-                }];
+                const newMsgs = s.messages.map(msg => msg.id === botMsgId ? { ...msg, text: "Lỗi: " + error?.message, isError: true } : msg);
                 return { ...s, messages: newMsgs };
             }
             return s;
         }));
-    } finally {
-        setIsThinking(false);
-    }
+    } finally { setIsThinking(false); }
   };
+
+  // --- Feature Handlers ---
 
   const handleHtmlSubmit = (html: string) => {
     const analysisPrompt = `Hãy phân tích đoạn mã HTML sau và tạo bảng XPath chuẩn cho các phần tử quan trọng:\n\n\`\`\`html\n${html}\n\`\`\``;
-    sendChatMessage(analysisPrompt, null);
-  };
-
-  const handlePromptSelect = (prompt: string) => {
-    setInputValue(prompt);
+    sendChatMessage(analysisPrompt, null, null);
   };
 
   const handleFixContent = (content: string) => {
     const isMermaid = /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline)/.test(content);
-    let prompt = '';
-    
-    if (isMermaid && !content.includes(':::')) {
-        prompt = `Phân tích code Mermaid sau và sửa các lỗi Parsing/Syntax/Cycle Error.
+    let prompt = isMermaid 
+        ? `Phân tích code Mermaid sau và sửa các lỗi Parsing/Syntax/Cycle Error...\n\n\`\`\`mermaid\n${content}\n\`\`\`` 
+        : `Nội dung sau bị lỗi định dạng Markdown. Hãy định dạng lại chuẩn xác:\n\n${content}`;
+    sendChatMessage(prompt, null, null);
+  };
 
-CODE CẦN SỬA:
-\`\`\`mermaid
-${content}
-\`\`\`
-
-YÊU CẦU SỬA LỖI BẮT BUỘC:
-1. **XÓA SỐ THỨ TỰ**: Loại bỏ hoàn toàn các số thứ tự dạng \`1.\`, \`2.\` hoặc các dấu gạch đầu dòng ở đầu mỗi dòng code.
-2. **SỬA LỖI CYCLE (Parent-Child)**:
-   - Nếu \`subgraph A\` chứa node \`A\`, đây là lỗi Cycle.
-   - **Cách sửa:** Đổi ID Subgraph thành tên khác (ví dụ: \`subgraph Grp_A\`).
-3. **CÚ PHÁP ID & KẾT NỐI**:
-   - ID Node TUYỆT ĐỐI KHÔNG chứa khoảng trắng. Nếu thấy (VD: \`Gr NodeA\`), hãy xóa phần thừa hoặc nối lại (\`NodeA\`).
-   - Kiểm tra các mũi tên \`-->\`, đảm bảo phía sau là ID hợp lệ, không có ký tự rác.
-4. **LỖI KÝ TỰ ĐẶC BIỆT (Parse Error)**:
-   - Nếu nội dung hiển thị (trong dấu []) chứa ký tự đặc biệt như \`()\`, \`:\`, \`[]\`, \`.\` (ví dụ: \`NodeA[Data (Body): json]\`), BẮT BUỘC phải bọc trong ngoặc kép.
-   - **Cách sửa:** \`NodeA["Data (Body): json"]\`.
-
-TRẢ VỀ:
-- Chỉ trả về block code Mermaid đã sửa.
-- KHÔNG giải thích.`;
-    } else {
-        prompt = `Nội dung hướng dẫn sau đây bị lỗi định dạng Markdown. Hãy định dạng lại chuẩn xác:\n\n${content}`;
-    }
-    sendChatMessage(prompt, null);
+  const handleKnowledgeSync = () => {
+      const syncPrompt = `NHIỆM VỤ: Sử dụng Google Search để truy cập các tài liệu chính thức sau và cập nhật context về các tính năng mới nhất (API V3, Node mới):\n${GPM_OFFICIAL_DOCS.join('\n')}\n\nHãy liệt kê 3 cập nhật quan trọng nhất bạn tìm thấy.`;
+      sendChatMessage(syncPrompt, null, null);
   };
 
   const handleVoiceInput = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-    } else {
-      if (recognitionRef.current) {
-        setIsListening(true);
-        recognitionRef.current.start();
-      } else {
-        alert("Trình duyệt của bạn không hỗ trợ tính năng nhận diện giọng nói.");
-      }
-    }
+    if (isListening) { recognitionRef.current?.stop(); setIsListening(false); } 
+    else { recognitionRef.current ? (setIsListening(true), recognitionRef.current.start()) : alert("Browser not supported"); }
   };
 
   const handleExportChat = () => {
     if (!currentSession) return;
-    const content = currentSession.messages.map(m => 
-      `[${m.role === Role.USER ? 'USER' : 'BOT'} - ${new Date(m.timestamp).toLocaleString()}]\n${m.text}\n`
-    ).join('\n-------------------\n');
-    
+    const content = currentSession.messages.map(m => `[${m.role === Role.USER ? 'USER' : 'BOT'}]\n${m.text}\n`).join('\n---\n');
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `GPM_Chat_Export_${currentSession.id}.txt`;
-    a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `GPM_Chat_${currentSession.id}.txt`; a.click();
     URL.revokeObjectURL(url);
   };
+
+  // --- UI Logic ---
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputValue(val);
     const match = val.match(/(?:^|\s)\/([a-zA-Z0-9]*)$/);
-    if (match) {
-      setSlashQuery(match[1]);
-      setShowSlashMenu(true);
-    } else {
-      setShowSlashMenu(false);
-    }
+    if (match) { setSlashQuery(match[1]); setShowSlashMenu(true); } else setShowSlashMenu(false);
   };
 
   const handleSelectSlashCommand = (cmd: { value: string }) => {
-    if (cmd.value === '/faker') {
-        setIsFakerModalOpen(true);
-        setShowSlashMenu(false);
-        const newVal = inputValue.replace(/(?:^|\s)\/faker$/, '');
-        setInputValue(newVal.trim());
-        return;
-    }
-    const newVal = inputValue.replace(/(?:^|\s)\/([a-zA-Z0-9]*)$/, (match) => {
-        return match.startsWith(' ') ? ' ' + cmd.value : cmd.value;
-    });
-    setInputValue(newVal);
-    setShowSlashMenu(false);
-  };
-
-  const handleFakerInsert = (text: string) => {
-    setInputValue(prev => prev + (prev ? '\n' : '') + text);
+    if (cmd.value === '/faker') { setIsFakerModalOpen(true); setShowSlashMenu(false); setInputValue(inputValue.replace(/(?:^|\s)\/faker$/, '').trim()); return; }
+    const newVal = inputValue.replace(/(?:^|\s)\/([a-zA-Z0-9]*)$/, (match) => match.startsWith(' ') ? ' ' + cmd.value : cmd.value);
+    setInputValue(newVal); setShowSlashMenu(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (showSlashMenu) {
-        if (filteredCommands.length > 0) {
-            handleSelectSlashCommand(filteredCommands[0]);
-            return;
-        }
-        setShowSlashMenu(false);
-      }
-      handleSendMessage();
+      if (showSlashMenu && filteredCommands.length > 0) { handleSelectSlashCommand(filteredCommands[0]); return; }
+      setShowSlashMenu(false); handleSendMessage();
     }
-    if (e.key === 'Escape') {
-        setShowSlashMenu(false);
-    }
+    if (e.key === 'Escape') setShowSlashMenu(false);
   };
 
-  const handleWelcomeAction = (text: string, isTool?: string) => {
-      if (isTool === 'html') {
-          setIsHtmlModalOpen(true);
-      } else if (isTool === 'faker') {
-          setIsFakerModalOpen(true);
-      } else {
-          setInputValue(text);
-      }
-  };
-
-  const filteredCommands = NODE_COMMANDS.filter(c => 
-    c.label.toLowerCase().includes(slashQuery.toLowerCase()) || 
-    c.desc.toLowerCase().includes(slashQuery.toLowerCase())
-  );
-
+  const filteredCommands = NODE_COMMANDS.filter(c => c.label.toLowerCase().includes(slashQuery.toLowerCase()));
   const isEmptyChat = messages.length <= 1;
 
   return (
     <div className="flex h-full bg-transparent overflow-hidden text-slate-100 font-sans">
-      {/* Modals */}
-      <HtmlAnalysisModal 
-        isOpen={isHtmlModalOpen} 
-        onClose={() => setIsHtmlModalOpen(false)} 
-        onAnalyze={handleHtmlSubmit}
-      />
-      <PromptLibraryModal 
-        isOpen={isPromptLibraryOpen}
-        onClose={() => setIsPromptLibraryOpen(false)}
-        onSelectPrompt={handlePromptSelect}
-        messages={messages}
-      />
-      <FakerGeneratorModal
-        isOpen={isFakerModalOpen}
-        onClose={() => setIsFakerModalOpen(false)}
-        onInsert={handleFakerInsert}
-      />
+      <HtmlAnalysisModal isOpen={isHtmlModalOpen} onClose={() => setIsHtmlModalOpen(false)} onAnalyze={handleHtmlSubmit} />
+      <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={setInputValue} messages={messages} />
+      <FakerGeneratorModal isOpen={isFakerModalOpen} onClose={() => setIsFakerModalOpen(false)} onInsert={(t) => setInputValue(prev => prev + '\n' + t)} />
+      <GpmDocsModal isOpen={isDocsModalOpen} onClose={() => setIsDocsModalOpen(false)} onSync={handleKnowledgeSync} />
 
-      {/* Sidebar */}
       <ChatHistorySidebar 
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        onSelectSession={setCurrentSessionId}
-        onCreateSession={createNewSession}
-        onDeleteSession={deleteSession}
-        onRenameSession={renameSession}
-        onTogglePinSession={togglePinSession}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
+        sessions={sessions} currentSessionId={currentSessionId}
+        onSelectSession={handleSelectSession} onCreateSession={createNewSession}
+        onDeleteSession={deleteSession} onRenameSession={renameSession}
+        onTogglePinSession={togglePinSession} isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)} onOpenDocs={() => setIsDocsModalOpen(true)}
       />
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full w-full relative">
-        {/* Header - Transparent Floating */}
         <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-4 pointer-events-none">
           <div className="flex items-center gap-3 pointer-events-auto">
-            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-slate-400 hover:text-white glass-dock rounded-xl transition-colors">
+            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-slate-400 hover:text-white glass-dock rounded-xl">
               <MenuIcon />
             </button>
             <div className="flex items-center gap-3 glass-dock px-4 py-2 rounded-full backdrop-blur-md shadow-lg border border-white/5">
               <div className="md:hidden"><RobotIcon /></div>
-              <div className="min-w-0 max-w-[150px] md:max-w-xs">
-                <h1 className="text-sm font-bold text-white tracking-tight truncate flex items-center gap-2">
-                  {currentSession?.title || "GPM Assistant"}
-                  {currentSession?.isPinned && (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-cyan-400">
-                      <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </h1>
-              </div>
+              <h1 className="text-sm font-bold text-white truncate max-w-[150px] md:max-w-xs">{currentSession?.title || "GPM Assistant"}</h1>
             </div>
           </div>
-          
           <div className="flex items-center gap-2 pointer-events-auto">
-            <button 
-                onClick={handleExportChat}
-                className="p-2.5 text-slate-400 hover:text-white glass-dock rounded-full transition-colors hover:bg-slate-800 border border-white/5"
-                title="Xuất nội dung chat"
-            >
-                <DownloadIcon />
-            </button>
+            <button onClick={handleExportChat} className="p-2.5 text-slate-400 hover:text-white glass-dock rounded-full border border-white/5"><DownloadIcon /></button>
           </div>
         </header>
 
-        {/* Messages */}
         <main className="flex-1 overflow-y-auto px-2 md:px-0 pt-20 pb-44 custom-scrollbar scroll-smooth">
           {isEmptyChat ? (
-             <WelcomeHero onAction={handleWelcomeAction} />
+             <WelcomeHero onAction={(t, tool) => tool === 'html' ? setIsHtmlModalOpen(true) : tool === 'faker' ? setIsFakerModalOpen(true) : setInputValue(t)} />
           ) : (
             <div className="max-w-4xl mx-auto space-y-8 px-4 py-6">
                 {messages.slice(1).map((msg) => ( 
                 <div key={msg.id} className={`flex w-full ${msg.role === Role.USER ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`}>
                     <div className={`flex gap-4 max-w-[95%] md:max-w-[85%] ${msg.role === Role.USER ? 'flex-row-reverse' : 'flex-row'}`}>
-                    
-                    {/* Avatar */}
-                    <div className="flex-shrink-0 mt-1 hidden md:block">
-                        {msg.role === Role.USER ? (
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 border border-white/10 ring-1 ring-white/10">
-                            <span className="text-[10px] font-bold text-white tracking-widest">YOU</span>
+                        <div className="flex-shrink-0 mt-1 hidden md:block">
+                            {msg.role === Role.USER ? <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center border border-white/10 shadow-lg shadow-cyan-500/20 text-[10px] font-bold">YOU</div> : <RobotIcon />}
                         </div>
-                        ) : <RobotIcon />}
-                    </div>
-
-                    {/* Message Content Bubble */}
-                    <div className={`relative p-5 md:p-6 rounded-2xl shadow-xl overflow-hidden group/msg transition-all w-full border backdrop-blur-md
-                        ${msg.role === Role.USER 
-                            ? 'bg-gradient-to-br from-indigo-600/80 to-blue-700/80 text-white rounded-tr-sm border-indigo-400/30 shadow-[0_5px_15px_rgba(79,70,229,0.3)]' 
-                            : 'glass-panel text-slate-200 rounded-tl-sm border-white/5'} 
-                        ${msg.isError ? 'border-red-500/50 bg-red-900/20 text-red-200' : ''}
-                    `}>
-                        
-                        {/* Editing Mode */}
-                        {editingMessageId === msg.id ? (
-                        <div className="flex flex-col gap-3 w-full min-w-[300px]">
-                            <textarea
-                            value={editedMessageContent}
-                            onChange={(e) => setEditedMessageContent(e.target.value)}
-                            className="w-full bg-slate-900/80 text-white p-4 rounded-xl border border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-sm resize-y min-h-[100px] shadow-inner font-mono"
-                            autoFocus
-                            />
-                            <div className="flex justify-end gap-2">
-                            <button 
-                                onClick={cancelEditingMessage}
-                                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
-                                >
-                                <XMarkIcon /> Hủy
-                                </button>
-                                <button 
-                                onClick={() => handleSaveEdit(msg.id)}
-                                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 shadow-lg shadow-green-900/20"
-                                >
-                                <CheckIcon /> Lưu & Hỏi lại
-                                </button>
-                            </div>
-                        </div>
-                        ) : (
-                        <>
-                            <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-slate-950/80 prose-pre:border prose-pre:border-slate-800/80 prose-pre:backdrop-blur-sm">
-                                <MarkdownRenderer 
-                                    content={msg.text} 
-                                    onFixContent={handleFixContent}
-                                />
-                            </div>
-                            
-                            <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/5">
-                                <div className={`text-[10px] opacity-60 font-mono ${msg.role === Role.USER ? 'text-indigo-100' : 'text-slate-500'}`}>
-                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <div className={`relative p-5 md:p-6 rounded-2xl shadow-xl border backdrop-blur-md group/msg transition-all w-full
+                            ${msg.role === Role.USER ? 'bg-gradient-to-br from-indigo-600/80 to-blue-700/80 text-white rounded-tr-sm border-indigo-400/30' : 'glass-panel text-slate-200 rounded-tl-sm border-white/5'}
+                            ${msg.isError ? 'border-red-500/50 bg-red-900/20 text-red-200' : ''}`}>
+                            {editingMessageId === msg.id ? (
+                                <div className="flex flex-col gap-3 min-w-[300px]">
+                                    <textarea value={editedMessageContent} onChange={(e) => setEditedMessageContent(e.target.value)} className="w-full bg-slate-950 text-white p-4 rounded-xl border border-indigo-500/50 font-mono text-sm" autoFocus />
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => setEditingMessageId(null)} className="px-3 py-1.5 bg-slate-700 rounded-lg text-xs font-medium"><XMarkIcon /> Hủy</button>
+                                        <button onClick={() => handleSaveEdit(msg.id)} className="px-3 py-1.5 bg-green-600 rounded-lg text-xs font-medium"><CheckIcon /> Lưu & Hỏi lại</button>
+                                    </div>
                                 </div>
-
-                                {/* Edit Button */}
-                                {msg.role === Role.USER && !isThinking && (
-                                <button 
-                                    onClick={() => startEditingMessage(msg)}
-                                    className="opacity-0 group-hover/msg:opacity-100 p-1.5 text-indigo-200 hover:text-white hover:bg-white/10 rounded transition-all"
-                                    title="Sửa tin nhắn"
-                                >
-                                    <PencilSquareIcon />
-                                </button>
-                                )}
-                            </div>
-                        </>
-                        )}
-                    </div>
+                            ) : (
+                                <>
+                                    {msg.attachedImage && <div className="mb-4 rounded-lg overflow-hidden border border-white/10 max-w-sm"><img src={`data:${msg.attachedImage.mimeType};base64,${msg.attachedImage.data}`} alt="Clip" className="w-full h-auto cursor-zoom-in" onClick={(e) => window.open((e.target as any).src, '_blank')} /></div>}
+                                    <div className="prose prose-invert max-w-none"><MarkdownRenderer content={msg.text} onFixContent={handleFixContent} /></div>
+                                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/5 text-[10px] opacity-60 font-mono">
+                                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {msg.role === Role.USER && !isThinking && <button onClick={() => startEditingMessage(msg)} className="opacity-0 group-hover/msg:opacity-100 p-1.5 hover:bg-white/10 rounded"><PencilSquareIcon /></button>}
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
                 ))}
             </div>
           )}
-          
-          {/* Thinking Indicator */}
-          {isThinking && (
-              <div className="max-w-4xl mx-auto px-4 mt-4 animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex gap-4">
-                   <div className="hidden md:block"><RobotIcon /></div>
-                   <div className="glass px-6 py-4 rounded-3xl rounded-tl-none flex items-center gap-3 w-fit shadow-lg shadow-cyan-900/10 border border-cyan-500/20">
-                    <div className="flex gap-1.5">
-                        <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                    </div>
-                    <span className="text-xs text-cyan-300 font-mono uppercase tracking-wider ml-1">AI Processing...</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+          {isThinking && <div className="max-w-4xl mx-auto px-4 mt-4 animate-in fade-in"><div className="flex gap-4"><RobotIcon /><div className="glass px-6 py-4 rounded-3xl rounded-tl-none flex items-center gap-3 border border-cyan-500/20 shadow-lg shadow-cyan-900/10"><div className="flex gap-1.5"><div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div><div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{animationDelay:'150ms'}}></div><div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{animationDelay:'300ms'}}></div></div><span className="text-xs text-cyan-300 font-mono uppercase tracking-wider">AI Thinking...</span></div></div></div>}
+          <div ref={messagesEndRef} />
         </main>
 
-        {/* Floating Dock Input Area */}
-        <div 
-            className={`fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-[700px] z-40 transition-all px-4`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-        >
-          {isDragging && (
-            <div className="absolute inset-0 -top-24 bg-indigo-900/90 backdrop-blur-xl flex items-center justify-center z-50 border-2 border-dashed border-indigo-400 rounded-3xl pointer-events-auto animate-pulse shadow-2xl">
-              <div className="text-indigo-200 font-bold text-lg flex flex-col items-center gap-2">
-                 <AttachIcon />
-                 <span>Thả file vào đây để phân tích</span>
-              </div>
-            </div>
-          )}
-
-          {/* Slash Menu - Floating Above Dock */}
-          {showSlashMenu && filteredCommands.length > 0 && (
-             <div className="absolute bottom-full mb-4 w-[90%] md:w-full left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
-                <div className="p-2.5 bg-slate-950/80 border-b border-slate-700/50 text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-2">
-                   <span className="text-purple-400">⌘</span> Command Palette
-                </div>
-                <div className="max-h-60 overflow-y-auto custom-scrollbar p-1.5">
-                    {filteredCommands.map((cmd, idx) => (
-                        <button
-                            key={idx}
-                            onClick={() => handleSelectSlashCommand(cmd)}
-                            className="w-full text-left px-3 py-2.5 hover:bg-indigo-600/20 hover:text-indigo-200 text-slate-300 flex items-center gap-3 transition-colors rounded-xl group"
-                        >
-                            <div className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-purple-400 group-hover:border-purple-500/50 group-hover:text-purple-300 shadow-sm">
-                                <CommandIcon />
-                            </div>
-                            <div>
-                                <div className="font-bold text-sm text-slate-200 group-hover:text-purple-300">{cmd.label}</div>
-                                <div className="text-xs opacity-60 truncate font-mono">{cmd.desc}</div>
-                            </div>
-                        </button>
-                    ))}
-                </div>
-             </div>
-          )}
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-[700px] z-40 px-4" onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+          {isDragging && <div className="absolute inset-0 -top-24 bg-indigo-900/90 backdrop-blur-xl flex items-center justify-center z-50 border-2 border-dashed border-indigo-400 rounded-3xl animate-pulse shadow-2xl text-indigo-200 font-bold text-lg flex flex-col gap-2"><AttachIcon /><span>Thả file hoặc ảnh vào đây</span></div>}
+          {showSlashMenu && filteredCommands.length > 0 && <div className="absolute bottom-full mb-4 w-full left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4"><div className="p-2.5 bg-slate-950/80 border-b border-slate-700 text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-2"><span className="text-purple-400">⌘</span> Command Palette</div><div className="max-h-60 overflow-y-auto custom-scrollbar p-1.5">{filteredCommands.map((cmd, idx) => (<button key={idx} onClick={() => handleSelectSlashCommand(cmd)} className="w-full text-left px-3 py-2.5 hover:bg-indigo-600/20 hover:text-indigo-200 text-slate-300 flex items-center gap-3 rounded-xl transition-colors"><div className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-purple-400 group-hover:text-purple-300"><CommandIcon /></div><div><div className="font-bold text-sm text-slate-200">{cmd.label}</div><div className="text-xs opacity-60 truncate font-mono">{cmd.desc}</div></div></button>))}</div></div>}
           
-          {attachedFile && (
-              <div className="absolute bottom-full mb-4 bg-slate-800/90 border border-indigo-500/30 pl-2 pr-4 py-2 rounded-full text-sm text-indigo-300 shadow-xl flex items-center gap-3 w-fit animate-in slide-in-from-bottom-2 mx-auto left-0 right-0 backdrop-blur-md">
-                  <div className="p-1.5 bg-indigo-500/20 rounded-full text-indigo-200"><AttachIcon /></div>
-                  <span className="truncate max-w-[200px] font-medium">{attachedFile.name}</span>
-                  <button onClick={() => setAttachedFile(null)} className="hover:bg-slate-700 p-1 rounded-full text-slate-400 hover:text-white transition-colors">✕</button>
-              </div>
-          )}
+          <div className="flex flex-col gap-2 mb-4 items-center">
+            {attachedFile && <div className="bg-slate-800/90 border border-indigo-500/30 pl-2 pr-4 py-2 rounded-full text-sm text-indigo-300 shadow-xl flex items-center gap-3 w-fit animate-in slide-in-from-bottom-2 backdrop-blur-md"><div className="p-1.5 bg-indigo-500/20 rounded-full"><AttachIcon /></div><span className="truncate max-w-[200px] font-medium">{attachedFile.name}</span><button onClick={() => setAttachedFile(null)} className="hover:text-white transition-colors">✕</button></div>}
+            {attachedImage && <div className="relative bg-slate-800/90 border border-cyan-500/30 p-1 rounded-xl shadow-2xl animate-in slide-in-from-bottom-2 backdrop-blur-md"><img src={attachedImage.preview} alt="Preview" className="w-24 h-24 object-cover rounded-lg" /><button onClick={() => setAttachedImage(null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg"><XMarkIcon /></button></div>}
+          </div>
 
           <div className="w-full relative group">
-              {/* Main Dock Container */}
               <div className="relative flex items-end gap-2 glass-dock p-2 rounded-[32px] ring-1 ring-white/10 hover:ring-cyan-500/30 transition-all duration-300">
-                
-                {/* Tools - Left */}
                 <div className="flex gap-1 pb-1 pl-2">
-                    <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-cyan-300 hover:bg-white/10 rounded-full transition-colors" title="Đính kèm file">
-                        <AttachIcon />
-                    </button>
-                    <button onClick={() => setIsPromptLibraryOpen(true)} className="p-2.5 text-slate-400 hover:text-yellow-400 hover:bg-white/10 rounded-full transition-colors" title="Thư viện mẫu">
-                        <LightBulbIcon />
-                    </button>
-                    <button onClick={() => setIsHtmlModalOpen(true)} className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-white/10 rounded-full transition-colors hidden sm:block" title="Phân tích HTML">
-                        <CodeBracketIcon />
-                    </button>
-                    <button onClick={() => setIsFakerModalOpen(true)} className="p-2.5 text-slate-400 hover:text-purple-400 hover:bg-white/10 rounded-full transition-colors hidden sm:block" title="Dữ liệu giả">
-                        <DiceIcon />
-                    </button>
+                    <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-cyan-300 hover:bg-white/10 rounded-full transition-colors"><AttachIcon /></button>
+                    <button onClick={() => setIsPromptLibraryOpen(true)} className="p-2.5 text-slate-400 hover:text-yellow-400 hover:bg-white/10 rounded-full transition-colors"><LightBulbIcon /></button>
+                    <button onClick={() => setIsHtmlModalOpen(true)} className="p-2.5 text-slate-400 hover:text-blue-400 hover:bg-white/10 rounded-full transition-colors hidden sm:block"><CodeBracketIcon /></button>
                 </div>
-
-                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".txt,.json,.gscript,.js,.ts,.html,.htm" />
-
-                <textarea
-                    value={inputValue}
-                    onChange={handleInputChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder={isListening ? "Đang lắng nghe..." : "Hỏi về GPM Automate..."}
-                    className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none py-3.5 px-3 max-h-40 resize-none custom-scrollbar min-h-[52px]"
-                    rows={1}
-                />
-
-                {/* Actions - Right */}
+                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept=".txt,.json,.gscript,.js,.ts,.html,.htm,image/*" />
+                <textarea value={inputValue} onChange={handleInputChange} onKeyDown={handleKeyDown} onPaste={handlePaste} placeholder={isListening ? "Đang lắng nghe..." : "Dán ảnh hoặc hỏi về GPM..."} className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none py-3.5 px-3 max-h-40 resize-none custom-scrollbar min-h-[52px]" rows={1} />
                 <div className="flex gap-2 pb-1 pr-2">
-                    <button onClick={handleVoiceInput} className={`p-2.5 rounded-full transition-all ${isListening ? 'text-rose-500 bg-rose-500/10 animate-pulse' : 'text-slate-400 hover:text-rose-400 hover:bg-white/10'}`} title="Giọng nói">
-                        <MicrophoneIcon isListening={isListening} />
-                    </button>
-                    <button
-                        onClick={handleSendMessage}
-                        disabled={(!inputValue.trim() && !attachedFile) || isThinking}
-                        className="p-2.5 bg-gradient-to-tr from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 disabled:from-slate-800 disabled:to-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-full shadow-lg shadow-cyan-500/20 transition-all active:scale-95 flex items-center justify-center border border-white/10"
-                    >
-                        <SendIcon />
-                    </button>
+                    <button onClick={handleVoiceInput} className={`p-2.5 rounded-full transition-all ${isListening ? 'text-rose-500 bg-rose-500/10 animate-pulse' : 'text-slate-400 hover:text-rose-400 hover:bg-white/10'}`}><MicrophoneIcon isListening={isListening} /></button>
+                    <button onClick={handleSendMessage} disabled={(!inputValue.trim() && !attachedFile && !attachedImage) || isThinking} className="p-2.5 bg-gradient-to-tr from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 disabled:from-slate-800 disabled:opacity-50 text-white rounded-full shadow-lg shadow-cyan-500/20 active:scale-95 flex items-center justify-center border border-white/10"><SendIcon /></button>
                 </div>
-            </div>
-             <div className="text-center mt-3 opacity-0 group-hover:opacity-100 transition-opacity duration-500 hidden md:block">
-                <p className="text-[10px] text-slate-500 font-mono tracking-wide">Nhấn '/' để mở lệnh nhanh. </p>
               </div>
           </div>
         </div>

@@ -10,6 +10,8 @@ export interface Message {
   text: string;
   timestamp: Date;
   isError?: boolean;
+  attachedFile?: { name: string; content: string };
+  attachedImage?: { data: string; mimeType: string };
 }
 
 export interface ChatSession {

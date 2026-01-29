@@ -12,11 +12,18 @@ interface ChatHistorySidebarProps {
   onTogglePinSession: (id: string, e: React.MouseEvent) => void;
   isOpen: boolean;
   onClose: () => void;
+  onOpenDocs?: () => void;
 }
 
 const PlusIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+  </svg>
+);
+
+const BookOpenIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c1.052 0 2.062.18 3 .512v-14.25zM3.75 20.25a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM9 6.042a8.967 8.967 0 016-2.292m-6 2.292v14.25A8.987 8.987 0 0015 18c1.052 0 2.062.18 3 .512v-14.25A8.987 8.987 0 0015 3.75M9 19.713a11.962 11.962 0 01-3-1.463m9 1.463a11.962 11.962 0 013-1.463m-3-14.25v14.25" />
   </svg>
 );
 
@@ -71,7 +78,8 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
   onRenameSession,
   onTogglePinSession,
   isOpen,
-  onClose
+  onClose,
+  onOpenDocs
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -141,8 +149,8 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
             </button>
         </div>
 
-        {/* New Chat Button */}
-        <div className="p-4">
+        {/* Action Buttons Group */}
+        <div className="p-4 space-y-2">
           <button
             onClick={() => {
               onCreateSession();
@@ -153,6 +161,16 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
             <PlusIcon />
             <span className="text-sm font-semibold tracking-wide">NEW SESSION</span>
           </button>
+          
+          {onOpenDocs && (
+            <button
+                onClick={onOpenDocs}
+                className="w-full flex items-center gap-3 justify-center bg-slate-800/40 hover:bg-slate-700/60 text-slate-300 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all border border-slate-700/50 hover:border-cyan-500/30 group"
+            >
+                <div className="text-cyan-400 group-hover:scale-110 transition-transform"><BookOpenIcon /></div>
+                KNOWLEDGE BASE
+            </button>
+          )}
         </div>
 
         {/* Session List */}
@@ -237,7 +255,7 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
         
         {/* Footer info */}
         <div className="p-4 border-t border-white/5 text-[10px] text-slate-600 text-center font-mono uppercase tracking-widest bg-white/5">
-            System Online • v3.0
+            System Online • v3.1
         </div>
       </div>
     </>
