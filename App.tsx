@@ -215,7 +215,6 @@ export default function App() {
   const [attachedImage, setAttachedImage] = useState<{data: string, mimeType: string, preview: string} | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isApiSetupRequired, setIsApiSetupRequired] = useState<boolean>(false);
   
   // Modals
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
@@ -288,20 +287,6 @@ export default function App() {
   };
 
   // --- Effects & Initialization ---
-
-  // Check API Key Status on Mount
-  useEffect(() => {
-    const checkApi = async () => {
-        try {
-            // @ts-ignore
-            const hasKey = await window.aistudio.hasSelectedApiKey();
-            setIsApiSetupRequired(!hasKey);
-        } catch (e) {
-            setIsApiSetupRequired(true);
-        }
-    };
-    checkApi();
-  }, []);
 
   // Load state on Mount
   useEffect(() => {
@@ -685,16 +670,6 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSetupApiKey = async () => {
-    try {
-        // @ts-ignore
-        await window.aistudio.openSelectKey();
-        setIsApiSetupRequired(false);
-    } catch (e) {
-        alert("Không thể mở hộp thoại chọn Key.");
-    }
-  };
-
   // --- UI Logic ---
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -736,36 +711,6 @@ export default function App() {
         onTogglePinSession={togglePinSession} isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)} onOpenDocs={() => setIsDocsModalOpen(true)}
       />
-
-      {isApiSetupRequired && (
-          <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-500">
-             <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-                <div className="w-20 h-20 bg-indigo-600/20 rounded-2xl flex items-center justify-center mx-auto text-indigo-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                    </svg>
-                </div>
-                <div className="space-y-2">
-                    <h2 className="text-2xl font-bold text-white tracking-tight">Cấu hình API Key cá nhân</h2>
-                    <p className="text-slate-400 text-sm leading-relaxed">
-                        Để đảm bảo tính riêng tư và bảo mật, ứng dụng này yêu cầu bạn sử dụng API Key từ tài khoản Google của chính bạn. Chúng tôi không bao giờ sử dụng key mặc định.
-                    </p>
-                </div>
-                <button
-                    onClick={handleSetupApiKey}
-                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-900/40 active:scale-95 flex items-center justify-center gap-3 group"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 group-hover:rotate-12 transition-transform">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-                    </svg>
-                    CHỌN API KEY CỦA BẠN
-                </button>
-                <div className="text-[10px] text-slate-500 font-mono">
-                    Yêu cầu project GCP có thanh toán (Paid Project) • Hoàn toàn miễn phí mức Free Tier
-                </div>
-             </div>
-          </div>
-      )}
 
       <div className="flex-1 flex flex-col h-full w-full relative">
         <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-4 pointer-events-none">

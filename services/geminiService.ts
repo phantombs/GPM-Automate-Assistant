@@ -1,10 +1,7 @@
 
-import { GoogleGenAI, Content, Part } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { GPM_SYSTEM_INSTRUCTION } from "../constants";
 import { Message, Role } from "../types";
-
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
 /**
  * Giới hạn kích thước văn bản để tránh lỗi Token Limit
@@ -25,13 +22,18 @@ export const streamChatResponse = async (
   imageData?: { data: string; mimeType: string }
 ): Promise<AsyncIterable<string>> => {
   
-  const model = "gemini-3-flash-preview";
+  // Khởi tạo instance AI bằng API_KEY được cung cấp từ môi trường.
+  // Luôn tạo instance mới ngay trước khi sử dụng để đảm bảo sử dụng key mới nhất từ process.env.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Sử dụng mô hình gemini-3-pro-preview cho các tác vụ tư duy logic phức tạp
+  const model = "gemini-3-pro-preview";
 
   // Chuyển đổi lịch sử tin nhắn bao gồm cả Text, File và Hình ảnh
-  const historyContent: Content[] = history
+  const historyContent = history
     .filter(msg => (msg.text && msg.text.trim() !== '') || msg.attachedFile || msg.attachedImage)
     .map((msg) => {
-      const parts: Part[] = [];
+      // Khai báo parts là any[] để linh hoạt chứa cả text part và inlineData part
+      const parts: any[] = [];
       
       if (msg.text) {
         parts.push({ text: msg.text });
@@ -59,7 +61,8 @@ export const streamChatResponse = async (
     });
 
   // Tạo phần nội dung tin nhắn hiện tại
-  const currentParts: Part[] = [{ text: newMessage }];
+  // FIX: Khai báo kiểu any[] để tránh lỗi: Object literal may only specify known properties, and 'inlineData' does not exist in type '{ text: string; }'
+  const currentParts: any[] = [{ text: newMessage }];
   
   // Xử lý File đính kèm hiện tại
   if (fileContent) {
@@ -95,7 +98,9 @@ export const streamChatResponse = async (
 
     return (async function* () {
       for await (const chunk of result) {
-        const text = chunk.text;
+        const c = chunk as GenerateContentResponse;
+        // Sử dụng thuộc tính .text để lấy nội dung phản hồi (không gọi như một hàm)
+        const text = c.text;
         if (text) {
           yield text;
         }
@@ -104,10 +109,6 @@ export const streamChatResponse = async (
 
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    const errorMessage = error?.message || "";
-    if (errorMessage.includes("API_KEY_INVALID")) {
-        throw new Error("API Key không hợp lệ. Vui lòng kiểm tra lại cấu hình.");
-    }
     throw new Error(`Không thể kết nối với AI: ${error.message || "Lỗi không xác định"}`);
   }
 };

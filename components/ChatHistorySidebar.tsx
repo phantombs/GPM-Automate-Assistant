@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatSession } from '../types';
-import { ApiKeyManager } from './ApiKeyManager';
 
 interface ChatHistorySidebarProps {
   sessions: ChatSession[];
@@ -254,9 +253,6 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
           )}
         </div>
         
-        {/* API Key Manager at bottom */}
-        <ApiKeyManager onKeySelected={onCreateSession} />
-
         {/* Footer info */}
         <div className="p-4 border-t border-white/5 text-[10px] text-slate-600 text-center font-mono uppercase tracking-widest bg-white/5">
             System Online • v3.1
