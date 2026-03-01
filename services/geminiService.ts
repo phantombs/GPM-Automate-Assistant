@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { GPM_SYSTEM_INSTRUCTION } from "../constants";
 import { Message, Role } from "../types";
@@ -15,18 +16,48 @@ const truncateContent = (content: string) => {
   return content;
 };
 
+export type AiMode = 'smart' | 'fast' | 'deep_think' | 'search';
+
 export const streamChatResponse = async (
   history: Message[],
   newMessage: string,
   fileContent?: string,
-  imageData?: { data: string; mimeType: string }
+  imageData?: { data: string; mimeType: string },
+  aiMode: AiMode = 'smart'
 ): Promise<AsyncIterable<string>> => {
   
   // Khởi tạo instance AI bằng API_KEY được cung cấp từ môi trường.
   // Luôn tạo instance mới ngay trước khi sử dụng để đảm bảo sử dụng key mới nhất từ process.env.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Sử dụng mô hình gemini-3-pro-preview cho các tác vụ tư duy logic phức tạp
-  const model = "gemini-3-pro-preview";
+
+  let model: string;
+  let config: any = {
+    systemInstruction: GPM_SYSTEM_INSTRUCTION,
+    temperature: 0.5,
+  };
+
+  switch (aiMode) {
+    case 'fast':
+      // FIX: Use 'gemini-flash-lite-latest' for flash lite model as per guidelines.
+      model = 'gemini-flash-lite-latest';
+      // Fast mode không cần search để tối ưu tốc độ
+      break;
+    case 'deep_think':
+      model = 'gemini-3-pro-preview';
+      config.thinkingConfig = { thinkingBudget: 32768 };
+      config.tools = [{ googleSearch: {} }]; // Tác vụ phức tạp có thể cần thông tin mới
+      break;
+    case 'search':
+      model = 'gemini-3-flash-preview';
+      config.tools = [{ googleSearch: {} }];
+      break;
+    case 'smart':
+    default:
+      model = 'gemini-3-pro-preview';
+      config.tools = [{ googleSearch: {} }]; // Chế độ mặc định vẫn có khả năng tìm kiếm
+      break;
+  }
+
 
   // Chuyển đổi lịch sử tin nhắn bao gồm cả Text, File và Hình ảnh
   const historyContent = history
@@ -83,11 +114,7 @@ export const streamChatResponse = async (
 
   const chat = ai.chats.create({
     model: model,
-    config: {
-      systemInstruction: GPM_SYSTEM_INSTRUCTION,
-      temperature: 0.5,
-      tools: [{ googleSearch: {} }],
-    },
+    config: config,
     history: historyContent,
   });
 

@@ -1,6 +1,7 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
-import { streamChatResponse } from './services/geminiService';
+import { streamChatResponse, AiMode } from './services/geminiService';
 import { Message, Role, ChatSession } from './types';
 import { INITIAL_GREETING, GPM_OFFICIAL_DOCS } from './constants';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
@@ -91,6 +92,34 @@ const DiceIcon = () => (
   </svg>
 );
 
+const SparkIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.624L16.5 21.75l-.398-1.126a3.375 3.375 0 00-2.455-2.456L12.75 18l1.126-.398a3.375 3.375 0 002.455-2.456L16.5 14.25l.398 1.126a3.375 3.375 0 002.456 2.456L20.25 18l-1.126.398a3.375 3.375 0 00-2.456 2.456z" />
+    </svg>
+);
+const BoltIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+    </svg>
+);
+
+const NetworkIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
+       <path strokeLinecap="round" strokeLinejoin="round" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25z" />
+       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 9.75h15M4.5 14.25h15M10.5 2.25v19.5" />
+    </svg>
+);
+const SearchIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+    </svg>
+);
+const ChevronDownIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+  </svg>
+);
+
 // --- Constants & Configs ---
 const STORAGE_KEY = 'gpm_chat_sessions';
 const ACTIVE_SESSION_KEY = 'gpm_active_session_id';
@@ -115,6 +144,31 @@ const sortSessions = (sessions: ChatSession[]) => {
     return b.lastMessageAt.getTime() - a.lastMessageAt.getTime();
   });
 };
+
+// FIX: Changed JSX.Element to React.ReactNode to resolve "Cannot find namespace 'JSX'" error.
+const AI_MODES: Record<AiMode, { name: string; icon: React.ReactNode; description: string }> = {
+  smart: {
+    name: "Thông minh",
+    icon: <SparkIcon />,
+    description: "Mô hình Pro cho các tác vụ phức tạp."
+  },
+  fast: {
+    name: "Nhanh",
+    icon: <BoltIcon />,
+    description: "Phản hồi tức thì cho các câu hỏi đơn giản."
+  },
+  deep_think: {
+    name: "Tư duy sâu",
+    icon: <NetworkIcon />,
+    description: "Kích hoạt Thinking Mode cho yêu cầu chuyên sâu."
+  },
+  search: {
+    name: "Web Search",
+    icon: <SearchIcon />,
+    description: "Sử dụng Google Search để có thông tin mới nhất."
+  }
+};
+
 
 // --- Sub-Components ---
 const WelcomeHero = ({ onAction }: { onAction: (text: string, isTool?: string) => void }) => {
@@ -215,6 +269,7 @@ export default function App() {
   const [attachedImage, setAttachedImage] = useState<{data: string, mimeType: string, preview: string} | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isApiSetupRequired, setIsApiSetupRequired] = useState<boolean>(false);
   
   // Modals
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
@@ -223,6 +278,10 @@ export default function App() {
   const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
   
   const [isListening, setIsListening] = useState(false);
+
+  // AI Mode State
+  const [aiMode, setAiMode] = useState<AiMode>('smart');
+  const [isModeSelectorOpen, setIsModeSelectorOpen] = useState(false);
   
   // Editing Message State
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -235,6 +294,7 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null); 
+  const modeSelectorRef = useRef<HTMLDivElement>(null);
 
   // --- Persistence Logic ---
 
@@ -287,6 +347,33 @@ export default function App() {
   };
 
   // --- Effects & Initialization ---
+
+  // Check API Key Status on Mount
+  useEffect(() => {
+    const checkApi = async () => {
+        try {
+            // @ts-ignore
+            const hasKey = await window.aistudio.hasSelectedApiKey();
+            setIsApiSetupRequired(!hasKey);
+        } catch (e) {
+            setIsApiSetupRequired(true);
+        }
+    };
+    checkApi();
+  }, []);
+  
+  // Handle click outside for mode selector
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (modeSelectorRef.current && !modeSelectorRef.current.contains(event.target as Node)) {
+        setIsModeSelectorOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [modeSelectorRef]);
 
   // Load state on Mount
   useEffect(() => {
@@ -536,7 +623,7 @@ export default function App() {
       updateCurrentSessionMessages(messagesWithBotPlaceholder);
 
       const historyContext = messages.slice(-10); 
-      const stream = await streamChatResponse(historyContext, text, file?.content, image ? { data: image.data, mimeType: image.mimeType } : undefined);
+      const stream = await streamChatResponse(historyContext, text, file?.content, image ? { data: image.data, mimeType: image.mimeType } : undefined, aiMode);
 
       let fullResponse = '';
       for await (const chunk of stream) {
@@ -611,7 +698,8 @@ export default function App() {
             session.messages.slice(0, msgIndex).slice(-10), 
             updatedUserMsg.text, 
             originalMsg.attachedFile?.content,
-            originalMsg.attachedImage
+            originalMsg.attachedImage,
+            aiMode
         );
         let fullResponse = '';
         for await (const chunk of stream) {
@@ -670,6 +758,16 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleSetupApiKey = async () => {
+    try {
+        // @ts-ignore
+        await window.aistudio.openSelectKey();
+        setIsApiSetupRequired(false);
+    } catch (e) {
+        alert("Không thể mở hộp thoại chọn Key.");
+    }
+  };
+
   // --- UI Logic ---
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -712,6 +810,43 @@ export default function App() {
         onClose={() => setIsSidebarOpen(false)} onOpenDocs={() => setIsDocsModalOpen(true)}
       />
 
+      {isApiSetupRequired && (
+          <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-500">
+             <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
+                <div className="w-20 h-20 bg-indigo-600/20 rounded-2xl flex items-center justify-center mx-auto text-indigo-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                </div>
+                <div className="space-y-2">
+                    <h2 className="text-2xl font-bold text-white tracking-tight">Kích hoạt trợ lý với API Key cá nhân</h2>
+                    <p className="text-slate-400 text-sm leading-relaxed">
+                        Theo quy tắc bảo mật của hệ thống GPM AI, bạn cần cung cấp API Key từ chính tài khoản Google của mình để bắt đầu. 
+                        <strong> Chúng tôi không bao giờ lưu trữ hoặc sử dụng Key mặc định của nhà phát triển.</strong>
+                    </p>
+                </div>
+                <button
+                    onClick={handleSetupApiKey}
+                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-900/40 active:scale-95 flex items-center justify-center gap-3 group"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 group-hover:rotate-12 transition-transform">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                    </svg>
+                    KẾT NỐI API KEY CỦA BẠN
+                </button>
+                <div className="space-y-3 pt-2">
+                    <p className="text-[10px] text-slate-500 font-mono italic">
+                        * Hộp thoại bảo mật của Google sẽ mở ra để bạn chọn Key. <br/>
+                        * Hệ thống tự động sử dụng khóa này cho mọi tác vụ kịch bản.
+                    </p>
+                    <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="inline-block text-[11px] text-indigo-400 hover:underline">
+                        Hướng dẫn lấy API Key miễn phí & thiết lập thanh toán →
+                    </a>
+                </div>
+             </div>
+          </div>
+      )}
+
       <div className="flex-1 flex flex-col h-full w-full relative">
         <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-4 pointer-events-none">
           <div className="flex items-center gap-3 pointer-events-auto">
@@ -722,6 +857,33 @@ export default function App() {
               <div className="md:hidden"><RobotIcon /></div>
               <h1 className="text-sm font-bold text-white truncate max-w-[150px] md:max-w-xs">{currentSession?.title || "GPM Assistant"}</h1>
             </div>
+
+            {/* AI Mode Selector */}
+            <div ref={modeSelectorRef} className="relative">
+                <button onClick={() => setIsModeSelectorOpen(prev => !prev)} className="flex items-center gap-2 glass-dock pl-3 pr-2 py-1.5 rounded-full backdrop-blur-md shadow-lg border border-white/5 hover:border-cyan-400/50 transition-colors">
+                    <span className="text-cyan-400">{AI_MODES[aiMode].icon}</span>
+                    <span className="text-xs font-bold text-white">{AI_MODES[aiMode].name}</span>
+                    <ChevronDownIcon />
+                </button>
+                {isModeSelectorOpen && (
+                    <div className="absolute top-full mt-2 w-64 glass-panel rounded-xl shadow-2xl p-2 animate-in fade-in slide-in-from-top-2">
+                        {(Object.keys(AI_MODES) as AiMode[]).map(mode => (
+                            <button 
+                                key={mode} 
+                                onClick={() => { setAiMode(mode); setIsModeSelectorOpen(false); }}
+                                className={`w-full flex items-start gap-3 p-3 rounded-lg text-left transition-colors ${aiMode === mode ? 'bg-indigo-600/30' : 'hover:bg-slate-800/50'}`}
+                            >
+                                <span className={aiMode === mode ? 'text-indigo-300' : 'text-slate-400'}>{AI_MODES[mode].icon}</span>
+                                <div>
+                                    <p className={`font-bold text-sm ${aiMode === mode ? 'text-white' : 'text-slate-200'}`}>{AI_MODES[mode].name}</p>
+                                    <p className="text-xs text-slate-400">{AI_MODES[mode].description}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+            
           </div>
           <div className="flex items-center gap-2 pointer-events-auto">
             <button onClick={handleExportChat} className="p-2.5 text-slate-400 hover:text-white glass-dock rounded-full border border-white/5"><DownloadIcon /></button>

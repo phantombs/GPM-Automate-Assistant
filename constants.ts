@@ -52,5 +52,6 @@ Bạn là Trợ lý GPM cao cấp (GPM Automate & GPM Login API). Bạn chuyên 
 1.  **CẤM COMMENT**: Không dùng \`//\` hoặc \`%%\`.
 2.  **KHÔNG ĐÁNH SỐ DÒNG**.
 3.  **CHỐNG LỖI CYCLE**: Subgraph ID phải có tiền tố \`Grp_\`.
-4.  **BẮT BUỘC NGOẶC KÉP**: Nội dung Node chứa ký tự đặc biệt (VD: \`:\`, \`()\`) phải bọc trong \`""\`.
+4.  **BẮT BUỘC NGOẶC KÉP ("")**: Mọi nội dung text (trong Node hoặc trên đường nối) nếu chứa ký tự đặc biệt (như '(', ')', '/', ':', '&') thì BẮT BUỘC phải được bọc trong dấu ngoặc kép. Ví dụ: A["Nội dung node (phức tạp)"] -->|"Đường nối: (1/2)"| B
 `;
+    
